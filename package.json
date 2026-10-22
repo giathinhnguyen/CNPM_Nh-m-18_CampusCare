@@ -1,0 +1,14 @@
+{
+  "name": "brewlite",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:web": "pnpm --filter web dev",
+    "dev:api": "pnpm --filter api start:dev",
+    "build": "pnpm --recursive run build",
+    "build:web": "pnpm --filter web build",
+    "build:api": "pnpm --filter api build",
+    "test": "pnpm --recursive run test"
+  },
+  "packageManager": "pnpm@12.14.0"
+}
