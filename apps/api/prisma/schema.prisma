@@ -1,0 +1,378 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+  datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+  }
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+
+  @@map("user_role_enum")
+}
+
+enum DrinkSize {
+  S
+  M
+  L
+
+  @@map("drink_size_enum")
+}
+
+enum DrinkLevel {
+  ZERO
+  FIFTY
+  HUNDRED
+  ONE_TWENTY
+
+  @@map("drink_level_enum")
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  CANCELLED
+  EXPIRED
+
+  @@map("order_status_enum")
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+
+  @@map("payment_status_enum")
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+
+  @@map("payment_method_enum")
+}
+
+enum DiscountType {
+  FIXED
+  PERCENTAGE
+
+  @@map("discount_type_enum")
+}
+
+enum LoyaltyTransactionType {
+  EARN
+  REDEEM
+  EXPIRED_ROLLBACK
+  REDEMPTION_ROLLBACK
+
+  @@map("loyalty_type_enum")
+}
+
+enum RewardRedemptionStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+
+  @@map("reward_redemption_status_enum")
+}
+
+model User {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email         String   @unique @db.VarChar(255)
+  passwordHash  String?  @map("password_hash") @db.VarChar(255)
+  fullName      String   @map("full_name") @db.VarChar(100)
+  googleId      String?  @unique @map("google_id") @db.VarChar(255)
+  role          UserRole @default(CUSTOMER)
+  loyaltyPoints Int      @default(0) @map("loyalty_points")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  cartItems           CartItem[]
+  orders              Order[]
+  loyaltyTransactions LoyaltyTransaction[]
+  rewardRedemptions   RewardRedemption[]
+
+  @@map("users")
+}
+
+model Category {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String   @unique @db.VarChar(100)
+  slug         String   @unique @db.VarChar(100)
+  displayOrder Int      @default(0) @map("display_order")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  products Product[]
+
+  @@index([isActive, displayOrder])
+  @@map("categories")
+}
+
+model Product {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  categoryId    String   @map("category_id") @db.Uuid
+  name          String   @db.VarChar(100)
+  description   String?  @db.Text
+  basePrice     Decimal  @map("base_price") @db.Decimal(12, 0)
+  imageUrl      String?  @map("image_url") @db.VarChar(500)
+  stockQuantity Int      @default(0) @map("stock_quantity")
+  isActive      Boolean  @default(true) @map("is_active")
+  version       Int      @default(1)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  category   Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  sizes      ProductSize[]
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@index([categoryId])
+  @@index([isActive])
+  @@index([categoryId, isActive])
+  @@map("products")
+}
+
+model ProductSize {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productId       String    @map("product_id") @db.Uuid
+  size            DrinkSize
+  priceAdjustment Decimal   @default(0) @map("price_adjustment") @db.Decimal(12, 0)
+  isActive        Boolean   @default(true) @map("is_active")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  product       Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  cartItems     CartItem[]
+  rewardProduct RewardProduct?
+
+  @@unique([productId, size])
+  @@index([productId, isActive])
+  @@map("product_sizes")
+}
+
+model Topping {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @unique @db.VarChar(100)
+  price     Decimal  @db.Decimal(12, 0)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  cartItemToppings  CartItemTopping[]
+  orderItemToppings OrderItemTopping[]
+
+  @@index([isActive])
+  @@map("toppings")
+}
+
+model CartItem {
+  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String     @map("user_id") @db.Uuid
+  productId      String     @map("product_id") @db.Uuid
+  productSizeId  String     @map("product_size_id") @db.Uuid
+  sweetnessLevel DrinkLevel @default(HUNDRED) @map("sweetness_level")
+  iceLevel       DrinkLevel @default(HUNDRED) @map("ice_level")
+  quantity       Int
+  note           String?    @db.VarChar(255)
+  isSelected     Boolean    @default(true) @map("is_selected")
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product     Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productSize ProductSize       @relation(fields: [productSizeId], references: [id], onDelete: Restrict)
+  toppings    CartItemTopping[]
+
+  @@index([userId])
+  @@index([productId])
+  @@index([productSizeId])
+  @@index([userId, isSelected])
+  @@map("cart_items")
+}
+
+model CartItemTopping {
+  cartItemId String @map("cart_item_id") @db.Uuid
+  toppingId  String @map("topping_id") @db.Uuid
+
+  cartItem CartItem @relation(fields: [cartItemId], references: [id], onDelete: Cascade)
+  topping  Topping  @relation(fields: [toppingId], references: [id], onDelete: Restrict)
+
+  @@id([cartItemId, toppingId])
+  @@index([toppingId])
+  @@map("cart_item_toppings")
+}
+
+model Promotion {
+  id                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code              String       @unique @db.VarChar(50)
+  discountType      DiscountType @map("discount_type")
+  discountValue     Decimal      @map("discount_value") @db.Decimal(12, 0)
+  maxDiscountAmount Decimal?     @map("max_discount_amount") @db.Decimal(12, 0)
+  minOrderAmount    Decimal      @default(0) @map("min_order_amount") @db.Decimal(12, 0)
+  isActive          Boolean      @default(true) @map("is_active")
+  startDate         DateTime?    @map("start_date") @db.Timestamptz(6)
+  endDate           DateTime?    @map("end_date") @db.Timestamptz(6)
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  orders Order[]
+
+  @@index([isActive, startDate, endDate])
+  @@map("promotions")
+}
+
+model Order {
+  id                   String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderCode            String      @unique @map("order_code") @db.VarChar(30)
+  userId               String      @map("user_id") @db.Uuid
+  promotionId          String?     @map("promotion_id") @db.Uuid
+  promotionCode        String?     @map("promotion_code") @db.VarChar(50)
+  totalAmount          Decimal     @map("total_amount") @db.Decimal(12, 0)
+  discountAmount       Decimal     @default(0) @map("discount_amount") @db.Decimal(12, 0)
+  finalAmount          Decimal     @map("final_amount") @db.Decimal(12, 0)
+  status               OrderStatus @default(PENDING_PAYMENT)
+  reservationExpiresAt DateTime    @map("reservation_expires_at") @db.Timestamptz(6)
+  note                 String?     @db.VarChar(255)
+  createdAt            DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user              User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  promotion         Promotion?           @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+  items             OrderItem[]
+  payments          Payment[]
+  loyaltyTxs        LoyaltyTransaction[]
+  rewardRedemptions RewardRedemption[]
+
+  @@index([userId])
+  @@index([promotionId])
+  @@index([status, reservationExpiresAt])
+  @@index([userId, createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id                  String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId             String     @map("order_id") @db.Uuid
+  productId           String     @map("product_id") @db.Uuid
+  productName         String     @map("product_name") @db.VarChar(100)
+  size                DrinkSize
+  sweetnessLevel      DrinkLevel @map("sweetness_level")
+  iceLevel            DrinkLevel @map("ice_level")
+  quantity            Int
+  basePrice           Decimal    @map("base_price") @db.Decimal(12, 0)
+  sizePriceAdjustment Decimal    @default(0) @map("size_price_adjustment") @db.Decimal(12, 0)
+  unitPrice           Decimal    @map("unit_price") @db.Decimal(12, 0)
+  toppingTotal        Decimal    @default(0) @map("topping_total") @db.Decimal(12, 0)
+  totalPrice          Decimal    @map("total_price") @db.Decimal(12, 0)
+  note                String?    @db.VarChar(255)
+
+  order    Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product  Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  toppings OrderItemTopping[]
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_items")
+}
+
+model OrderItemTopping {
+  id           String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderItemId  String  @map("order_item_id") @db.Uuid
+  toppingId    String  @map("topping_id") @db.Uuid
+  toppingName  String  @map("topping_name") @db.VarChar(100)
+  toppingPrice Decimal @map("topping_price") @db.Decimal(12, 0)
+
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  topping   Topping   @relation(fields: [toppingId], references: [id], onDelete: Restrict)
+
+  @@unique([orderItemId, toppingId])
+  @@index([orderItemId])
+  @@index([toppingId])
+  @@map("order_item_toppings")
+}
+
+model Payment {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId        String        @map("order_id") @db.Uuid
+  idempotencyKey String        @unique @map("idempotency_key") @db.VarChar(255)
+  paymentMethod  PaymentMethod @map("payment_method")
+  transactionId  String?       @map("transaction_id") @db.VarChar(255)
+  amount         Decimal       @db.Decimal(12, 0)
+  status         PaymentStatus @default(PENDING)
+  rawResponse    Json?         @map("raw_response") @db.JsonB
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@unique([paymentMethod, transactionId])
+  @@index([orderId])
+  @@index([orderId, status])
+  @@map("payments")
+}
+
+model RewardProduct {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  productSizeId  String   @unique @map("product_size_id") @db.Uuid
+  pointsRequired Int      @map("points_required")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  productSize ProductSize        @relation(fields: [productSizeId], references: [id], onDelete: Restrict)
+  redemptions RewardRedemption[]
+
+  @@index([isActive])
+  @@map("reward_products")
+}
+
+model RewardRedemption {
+  id                     String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                 String                 @map("user_id") @db.Uuid
+  rewardProductId        String                 @map("reward_product_id") @db.Uuid
+  orderId                String?                @map("order_id") @db.Uuid
+  productNameSnapshot    String                 @map("product_name_snapshot") @db.VarChar(100)
+  sizeSnapshot           DrinkSize              @map("size_snapshot")
+  pointsRequiredSnapshot Int                    @map("points_required_snapshot")
+  quantity               Int                    @default(1)
+  totalPointsSpent       Int                    @map("total_points_spent")
+  status                 RewardRedemptionStatus @default(PENDING)
+  createdAt              DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  rewardProduct       RewardProduct        @relation(fields: [rewardProductId], references: [id], onDelete: Restrict)
+  order               Order?               @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  loyaltyTransactions LoyaltyTransaction[]
+
+  @@index([userId])
+  @@index([rewardProductId])
+  @@index([orderId])
+  @@index([userId, createdAt])
+  @@map("reward_redemptions")
+}
+
+model LoyaltyTransaction {
+  id                 String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String                 @map("user_id") @db.Uuid
+  orderId            String?                @map("order_id") @db.Uuid
+  rewardRedemptionId String?                @map("reward_redemption_id") @db.Uuid
+  pointsChange       Int                    @map("points_change")
+  type               LoyaltyTransactionType
+  description        String?                @db.VarChar(255)
+  createdAt          DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  order            Order?            @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  rewardRedemption RewardRedemption? @relation(fields: [rewardRedemptionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([orderId])
+  @@index([rewardRedemptionId])
+  @@index([userId, createdAt])
+  @@map("loyalty_transactions")
+}

@@ -40,6 +40,7 @@ services:
       - start:dev
     ports:
       - "3000:3000"
+      - "5555:5555"
     volumes:
       - .:/workspace
       - root_node_modules:/workspace/node_modules
