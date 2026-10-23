@@ -15,9 +15,9 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { cx } from "../lib/utils";
 
 const navItems = [
-  { label: "Trang chủ", to: "/" },
-  { label: "Khuyến mãi", to: "/promotions" },
-  { label: "Đơn hàng", to: "/orders" },
+  { label: "Trang chủ", to: "/", enabled: true },
+  { label: "Khuyến mãi", to: "/promotions", enabled: false },
+  { label: "Đơn hàng", to: "/orders", enabled: false },
 ];
 
 export default function Layout() {
@@ -75,7 +75,7 @@ export default function Layout() {
             className="hidden items-center gap-1 rounded-full border border-[#e8ded4] bg-[#f5efe8]/75 p-1 md:flex"
             aria-label="Điều hướng chính"
           >
-            {navItems.map((item) => (
+            {navItems.map((item) => item.enabled ? (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -91,18 +91,22 @@ export default function Layout() {
               >
                 {item.label}
               </NavLink>
+            ) : (
+              <span key={item.to} title="Chức năng đang được phát triển" className="cursor-not-allowed rounded-full px-5 py-2.5 text-sm font-semibold text-[#b7a89d]">
+                {item.label}
+              </span>
             ))}
           </nav>
 
           {/* HEADER ACTIONS */}
           <div className="flex items-center gap-2">
-            <Link
-              to="/cart"
-              aria-label="Xem giỏ hàng"
-              className="relative grid size-11 place-items-center rounded-full border border-[#e3d8cd] bg-white text-[#493227] transition hover:border-[#aa8b75] hover:bg-[#f5eee7]"
-            >
+        <span
+          aria-label="Giỏ hàng - đang phát triển"
+          title="Giỏ hàng đang được phát triển"
+          className="relative grid size-11 cursor-not-allowed place-items-center rounded-full border border-[#e3d8cd] bg-white text-[#a9988d]"
+        >
               <ShoppingBag size={19} strokeWidth={1.8} />
-            </Link>
+        </span>
 
             {/* ACCOUNT DROPDOWN */}
             <div ref={accountRef} className="relative hidden sm:block">
@@ -172,7 +176,7 @@ export default function Layout() {
         {mobileOpen && (
           <div className="border-t border-[#e7ded4] bg-[#faf7f2] px-4 py-4 shadow-lg md:hidden">
             <nav className="mx-auto flex max-w-7xl flex-col gap-1">
-              {navItems.map((item) => (
+            {navItems.map((item) => item.enabled ? (
                 <NavLink
                   key={item.to}
                   to={item.to}
@@ -188,8 +192,12 @@ export default function Layout() {
                   }
                 >
                   {item.label}
-                </NavLink>
-              ))}
+              </NavLink>
+            ) : (
+              <span key={item.to} className="cursor-not-allowed rounded-xl px-4 py-3 text-sm font-semibold text-[#b7a89d]">
+                {item.label}
+              </span>
+            ))}
 
               <div className="my-2 border-t border-[#e7ded4]" />
 
@@ -254,15 +262,9 @@ export default function Layout() {
               <Link to="/" className="transition hover:text-white">
                 Menu hôm nay
               </Link>
-              <Link to="/promotions" className="transition hover:text-white">
-                Khuyến mãi
-              </Link>
-              <Link to="/orders" className="transition hover:text-white">
-                Đơn hàng của tôi
-              </Link>
-              <Link to="/cart" className="transition hover:text-white">
-                Giỏ hàng
-              </Link>
+          <span className="cursor-not-allowed text-[#8d7b70]" title="Chức năng đang được phát triển">Khuyến mãi</span>
+          <span className="cursor-not-allowed text-[#8d7b70]" title="Chức năng đang được phát triển">Đơn hàng của tôi</span>
+          <span className="cursor-not-allowed text-[#8d7b70]" title="Chức năng đang được phát triển">Giỏ hàng</span>
             </div>
           </div>
 
