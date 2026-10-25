@@ -1,14 +1,17 @@
+import { GoogleLogin } from "@react-oauth/google";
 import { useState, type FormEvent } from "react";
 import { ArrowRight, Coffee, Eye, EyeOff } from "lucide-react";
 import { Link, Navigate } from "react-router-dom";
 import { Button } from "../components/ui";
 import { useAuth } from "../contexts/AuthContext";
+import { AuthApiError } from "../services/authService";
 
 export default function LoginPage() {
-  const { user, loading, login } = useAuth();
+  const { user, loading, login, googleLogin } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [linkCredential, setLinkCredential] = useState<string | null>(null);
 
   if (loading) {
     return (
@@ -47,7 +50,30 @@ export default function LoginPage() {
       setSubmitting(false);
     }
   }
+  async function handleGoogleLogin(credential: string, password?: string) {
+    if (submitting) return;
 
+    setError("");
+    setSubmitting(true);
+
+    try {
+      await googleLogin(credential, password);
+      setLinkCredential(null);
+    } catch (cause) {
+      if (cause instanceof AuthApiError && cause.code === 'GOOGLE_LINK_REQUIRED') {
+        setLinkCredential(credential);
+      }
+      setError(
+        cause instanceof TypeError
+          ? "Không thể kết nối máy chủ. Vui lòng thử lại."
+          : cause instanceof Error
+            ? cause.message
+            : "Đăng nhập Google thất bại.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
   const inputClass =
     "min-h-12 w-full rounded-2xl border border-[#ded4ca] bg-white px-4 text-sm outline-none focus:border-[#80634e] focus:ring-4 focus:ring-[#b9845a]/15";
 
@@ -153,7 +179,57 @@ export default function LoginPage() {
                 </p>
               )}
             </form>
+            {linkCredential && (
+              <form className="mt-5 space-y-3 rounded-2xl bg-[#f5efe8] p-4" onSubmit={(event) => {
+                event.preventDefault();
+                const password = String(new FormData(event.currentTarget).get('linkPassword') ?? '');
+                event.currentTarget.reset();
+                void handleGoogleLogin(linkCredential, password);
+              }}>
+                <p className="text-sm text-[#624c3e]">
+                  Để dùng Google cho tài khoản hiện có, xác nhận mật khẩu BrewLite một lần.
+                  Không nhập mật khẩu Google ở đây.
+                </p>
+                <label className="block space-y-2 text-sm font-semibold">
+                  <span>Mật khẩu BrewLite</span>
+                  <input name="linkPassword" type="password" autoComplete="current-password"
+                    required disabled={submitting} className={inputClass} />
+                </label>
+                <Button type="submit" disabled={submitting}>Xác nhận liên kết Google</Button>
+                <button type="button" disabled={submitting} className="ml-3 text-sm underline"
+                  onClick={() => { setLinkCredential(null); setError(''); }}>Hủy</button>
+              </form>
+            )}
+            <div className="my-5 flex items-center gap-3">
+              <span className="h-px flex-1 bg-[#e5ddd5]" />
+              <span className="text-xs text-[#948278]">hoặc</span>
+              <span className="h-px flex-1 bg-[#e5ddd5]" />
+            </div>
 
+            <div className="flex justify-center">
+              {submitting ? (
+                <p role="status" className="text-sm text-[#7a685e]">
+                  Đang xử lý đăng nhập...
+                </p>
+              ) : (
+                <GoogleLogin
+                  onSuccess={(response) => {
+                    if (!response.credential) {
+                      setError("Google không trả về token xác thực.");
+                      return;
+                    }
+
+                    void handleGoogleLogin(response.credential);
+                  }}
+                  onError={() => {
+                    setError("Không thể đăng nhập Google. Vui lòng thử lại.");
+                  }}
+                  text="signin_with"
+                  shape="pill"
+                  size="large"
+                />
+              )}
+            </div>
             <Link
               to="/"
               className="mt-6 block text-center text-sm font-bold text-[#493127] underline underline-offset-4"

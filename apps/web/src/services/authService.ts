@@ -16,14 +16,23 @@ interface LoginResponse {
   user: AuthUser;
 }
 
+export class AuthApiError extends Error {
+  readonly code?: string;
+  constructor(message: string, code?: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
 async function readResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const data = await response.json().catch(() => null);
 
-    throw new Error(
+    throw new AuthApiError(
       typeof data?.message === "string"
         ? data.message
         : `Yêu cầu thất bại (${response.status}).`,
+      typeof data?.code === 'string' ? data.code : undefined,
     );
   }
 
@@ -43,6 +52,17 @@ export const authService = {
     return readResponse<LoginResponse>(response);
   },
 
+  async googleLogin(credential: string, password?: string): Promise<LoginResponse> {
+    const response = await fetch(`${API_URL}/auth/google`, {
+     method: "POST",
+     headers: {
+        "Content-Type": "application/json",
+      },
+     body: JSON.stringify({ credential, password }),
+    });
+
+   return readResponse<LoginResponse>(response);
+  },
   async getCurrentUser(token: string): Promise<AuthUser> {
     const response = await fetch(`${API_URL}/auth/me`, {
       headers: {

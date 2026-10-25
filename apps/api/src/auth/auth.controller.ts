@@ -18,7 +18,11 @@ export class AuthController {
   login(@Body() body: unknown) {
     return this.authService.login(body);
   }
-
+  @Post('google')
+  googleLogin(@Body() body: unknown) {
+    return this.authService.googleLogin(body);
+  }
+  
   @UseGuards(AuthGuard)
   @Get('me')
   getCurrentUser(@Req() request: AuthenticatedRequest) {

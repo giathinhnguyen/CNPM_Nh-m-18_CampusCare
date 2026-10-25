@@ -2,13 +2,18 @@ import {
   BadRequestException,
   Injectable,
   UnauthorizedException,
+  ServiceUnavailableException,
+  ConflictException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { compare } from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { OAuth2Client } from 'google-auth-library';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
+  private readonly googleClient = new OAuth2Client();
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -101,5 +106,133 @@ export class AuthService {
   }
 
   return user;
+}
+async googleLogin(body: unknown) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new BadRequestException('Thông tin đăng nhập không hợp lệ.');
+  }
+
+  const { credential, password } = body as Record<string, unknown>;
+
+  if (typeof credential !== 'string' || !credential) {
+    throw new BadRequestException('Thiếu token xác thực Google.');
+  }
+
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+
+  if (!clientId) {
+    throw new ServiceUnavailableException(
+      'Đăng nhập Google chưa được cấu hình.',
+    );
+  }
+
+  // Chỉ bắt lỗi xác minh Google trong khối này.
+  const payload = await this.googleClient
+    .verifyIdToken({
+      idToken: credential,
+      audience: clientId,
+    })
+    .then((ticket) => ticket.getPayload())
+    .catch(() => {
+      throw new UnauthorizedException(
+        'Token Google không hợp lệ hoặc đã hết hạn.',
+      );
+    });
+
+  if (!payload?.sub || !payload.email || !payload.email_verified) {
+    throw new UnauthorizedException(
+      'Tài khoản Google chưa có email được xác minh.',
+    );
+  }
+
+  const googleId = payload.sub;
+  const email = payload.email.trim().toLowerCase();
+
+  if (email.length > 255 || googleId.length > 255) {
+    throw new UnauthorizedException('Thông tin tài khoản Google không hợp lệ.');
+  }
+
+  // Google xác thực danh tính; BrewLite vẫn lưu User để gắn đơn hàng và điểm.
+  // Dùng sub của Google làm định danh liên kết, không dùng mật khẩu Google.
+  let user = await this.prisma.user.findUnique({
+    where: { googleId },
+  });
+
+  if (!user) {
+    const existingEmailUser = await this.prisma.user.findFirst({
+      where: {
+        email: {
+          equals: email,
+          mode: 'insensitive',
+        },
+      },
+    });
+
+    if (existingEmailUser) {
+      if (existingEmailUser.googleId || !existingEmailUser.passwordHash) {
+        throw new ConflictException('Tài khoản đã liên kết với phương thức khác.');
+      }
+      if (password === undefined) {
+        throw new ConflictException({
+          code: 'GOOGLE_LINK_REQUIRED',
+          message: 'Email này đã có tài khoản. Nhập mật khẩu BrewLite để liên kết Google.',
+        });
+      }
+      if (typeof password !== 'string' || !password ||
+          Buffer.byteLength(password, 'utf8') > 72 ||
+          !(await compare(password, existingEmailUser.passwordHash))) {
+        throw new UnauthorizedException('Mật khẩu BrewLite không đúng.');
+      }
+      // Chỉ liên kết nếu tài khoản chưa được liên kết bởi yêu cầu khác.
+      const linked = await this.prisma.user.updateMany({
+        where: { id: existingEmailUser.id, googleId: null,
+          passwordHash: existingEmailUser.passwordHash },
+        data: { googleId },
+      });
+      if (linked.count !== 1) {
+        throw new ConflictException('Tài khoản vừa thay đổi. Vui lòng thử đăng nhập Google lại.');
+      }
+      user = await this.prisma.user.findUnique({ where: { googleId } });
+    } else {
+      try {
+        user = await this.prisma.user.create({
+      data: {
+        googleId,
+        email,
+        // Tài khoản chỉ dùng Google không có mật khẩu BrewLite.
+        passwordHash: null,
+        fullName: (payload.name?.trim() || email.split('@')[0]).slice(0, 100),
+      },
+        });
+      } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+          throw error;
+        }
+        user = await this.prisma.user.findUnique({ where: { googleId } });
+        if (!user) {
+          throw new ConflictException('Tài khoản vừa được tạo. Vui lòng thử đăng nhập Google lại.');
+        }
+      }
+    }
+  }
+
+  if (!user) throw new UnauthorizedException('Không tìm thấy tài khoản.');
+  const accessToken = await this.jwtService.signAsync({
+    sub: user.id,
+    role: user.role,
+  });
+
+  return {
+    accessToken,
+    tokenType: 'Bearer',
+    expiresIn: 3600,
+    user: {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      role: user.role,
+      loyaltyPoints: user.loyaltyPoints,
+    },
+  };
 }
 }
