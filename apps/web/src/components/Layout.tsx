@@ -1,3 +1,4 @@
+import { useAuth } from "../contexts/AuthContext";
 import { useEffect, useRef, useState } from "react";
 import {
   CircleUserRound,
@@ -21,10 +22,18 @@ const navItems = [
 ];
 
 export default function Layout() {
+  const { user, loading, logout } = useAuth();
+
   const [mobileOpen, setMobileOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
+
+  function handleLogout() {
+    logout();
+    setAccountOpen(false);
+    setMobileOpen(false);
+  }
 
   useEffect(() => {
     const closeMenus = () => {
@@ -118,7 +127,9 @@ export default function Layout() {
                 className="flex h-11 items-center gap-2 rounded-full border border-[#e3d8cd] bg-white px-4 text-sm font-semibold text-[#493227] transition hover:border-[#aa8b75] hover:bg-[#f5eee7]"
               >
                 <CircleUserRound size={19} strokeWidth={1.8} />
-                <span>Đăng nhập</span>
+                <span>
+                  {loading ? "Đang tải..." : user ? user.fullName : "Đăng nhập"}
+                </span>
                 <ChevronDown
                   size={15}
                   className={cx(
@@ -133,28 +144,56 @@ export default function Layout() {
                   role="menu"
                   className="absolute right-0 top-[calc(100%+12px)] z-50 w-60 rounded-2xl border border-[#e4d9cf] bg-white p-2 shadow-[0_18px_48px_rgba(61,39,29,0.14)]"
                 >
-                  <p className="px-3 pb-3 pt-2 text-xs leading-5 text-[#8b776b]">
-                    Đăng nhập để quản lý đơn hàng và tích điểm thưởng.
-                  </p>
+                  {loading ? (
+                    <p className="px-3 py-2 text-sm text-[#8b776b]">
+                      Đang kiểm tra phiên đăng nhập...
+                    </p>
+                  ) : user ? (
+                    <>
+                      <div className="px-3 py-2">
+                        <p className="break-words text-sm font-semibold">
+                          {user.fullName}
+                        </p>
+                        <p className="mt-1 break-words text-xs text-[#8b776b]">
+                          {user.email}
+                        </p>
+                      </div>
 
-                  <Link
-                    role="menuitem"
-                    to="/login"
-                    onClick={() => setAccountOpen(false)}
-                    className="flex items-center justify-between rounded-xl bg-[#3b241c] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#56372a]"
-                  >
-                    Đăng nhập
-                    <ArrowRight size={16} />
-                  </Link>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={handleLogout}
+                        className="mt-2 w-full rounded-xl bg-[#3b241c] px-4 py-3 text-sm font-semibold text-white hover:bg-[#56372a]"
+                      >
+                        Đăng xuất
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="px-3 pb-3 pt-2 text-xs leading-5 text-[#8b776b]">
+                        Đăng nhập để quản lý đơn hàng và tích điểm thưởng.
+                      </p>
 
-                  <Link
-                    role="menuitem"
-                    to="/register"
-                    onClick={() => setAccountOpen(false)}
-                    className="mt-2 flex items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold text-[#4b3529] transition hover:bg-[#f5f0ea]"
-                  >
-                    Tạo tài khoản
-                  </Link>
+                      <Link
+                        role="menuitem"
+                        to="/login"
+                        onClick={() => setAccountOpen(false)}
+                        className="flex items-center justify-between rounded-xl bg-[#3b241c] px-4 py-3 text-sm font-semibold text-white hover:bg-[#56372a]"
+                      >
+                        Đăng nhập
+                        <ArrowRight size={16} />
+                      </Link>
+
+                      <Link
+                        role="menuitem"
+                        to="/register"
+                        onClick={() => setAccountOpen(false)}
+                        className="mt-2 flex items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold text-[#4b3529] hover:bg-[#f5f0ea]"
+                      >
+                        Tạo tài khoản
+                      </Link>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -201,21 +240,48 @@ export default function Layout() {
 
               <div className="my-2 border-t border-[#e7ded4]" />
 
-              <Link
-                to="/login"
-                onClick={() => setMobileOpen(false)}
-                className="rounded-xl px-4 py-3 text-sm font-semibold text-[#624c3e] hover:bg-[#eee6dc]"
-              >
-                Đăng nhập
-              </Link>
+              {loading ? (
+                <p className="px-4 py-3 text-sm text-[#8b776b]">
+                  Đang kiểm tra phiên đăng nhập...
+                </p>
+              ) : user ? (
+                <>
+                  <div className="px-4 py-3">
+                    <p className="break-words text-sm font-semibold">
+                      {user.fullName}
+                    </p>
+                    <p className="mt-1 break-words text-xs text-[#8b776b]">
+                      {user.email}
+                    </p>
+                  </div>
 
-              <Link
-                to="/register"
-                onClick={() => setMobileOpen(false)}
-                className="rounded-xl px-4 py-3 text-sm font-semibold text-[#624c3e] hover:bg-[#eee6dc]"
-              >
-                Tạo tài khoản
-              </Link>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="rounded-xl px-4 py-3 text-left text-sm font-semibold text-[#624c3e] hover:bg-[#eee6dc]"
+                  >
+                    Đăng xuất
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    onClick={() => setMobileOpen(false)}
+                    className="rounded-xl px-4 py-3 text-sm font-semibold text-[#624c3e] hover:bg-[#eee6dc]"
+                  >
+                    Đăng nhập
+                  </Link>
+
+                  <Link
+                    to="/register"
+                    onClick={() => setMobileOpen(false)}
+                    className="rounded-xl px-4 py-3 text-sm font-semibold text-[#624c3e] hover:bg-[#eee6dc]"
+                  >
+                    Tạo tài khoản
+                  </Link>
+                </>
+              )}
             </nav>
           </div>
         )}

@@ -49,6 +49,7 @@ services:
       NODE_ENV: development
       PORT: 3000
       WEB_ORIGIN: http://localhost:5173
+      JWT_SECRET: ${JWT_SECRET}
       DATABASE_URL: postgresql://brewlite:brewlite@postgres:5432/brewlite
     depends_on:
       postgres:
