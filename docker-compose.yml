@@ -24,6 +24,7 @@ services:
     environment:
       VITE_API_URL: http://localhost:3000/api
       VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
+      CHOKIDAR_USEPOLLING: "true"
     depends_on:
       api:
         condition: service_started
