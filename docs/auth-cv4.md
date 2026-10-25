@@ -15,7 +15,7 @@ Danh sách sản phẩm đổi điểm vẫn công khai; endpoint điểm cá nh
 ## Kiểm tra
 
 - `pnpm --filter api test`: kiểm tra token thiếu/sai/hết hạn, tài khoản bị xóa, lỗi database.
-- `pnpm --filter web test`: Node.js 24+, kiểm tra thời hạn token, gắn Authorization, xử lý 401/403/lỗi mạng và phản hồi từ phiên cũ.
+- `pnpm --filter web test`: Node.js 22.18+ hoặc 24+, kiểm tra thời hạn token, gắn Authorization, xử lý 401/403/lỗi mạng và phản hồi từ phiên cũ.
 - `pnpm --filter web build` và `pnpm --filter api build`.
 - Kiểm tra trình duyệt: mở `/account` khi chưa đăng nhập; đăng nhập và quay lại `/account`; tải lại trang; đăng xuất; thử token sai/hết hạn; kiểm tra tab khác khi đăng xuất. Thử cả email và Google với database/Google Client ID đã cấu hình.
 

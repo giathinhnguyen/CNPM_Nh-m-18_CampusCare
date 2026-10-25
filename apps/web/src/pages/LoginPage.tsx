@@ -235,6 +235,9 @@ export default function LoginPage() {
                 />
               )}
             </div>
+            <Link to="/register" state={location.state} className="mt-6 block text-center text-sm font-bold text-[#493127] underline underline-offset-4">
+              Chưa có tài khoản? Đăng ký
+            </Link>
             <Link
               to="/"
               className="mt-6 block text-center text-sm font-bold text-[#493127] underline underline-offset-4"

@@ -28,4 +28,9 @@ export class AuthController {
   getCurrentUser(@Req() request: AuthenticatedRequest) {
     return this.authService.getCurrentUser(request.user.id);
   }
+
+  @Post('register')
+  register(@Body() body: unknown) {
+    return this.authService.register(body);
+  }
 }
