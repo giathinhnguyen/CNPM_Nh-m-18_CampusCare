@@ -10,7 +10,7 @@ import {
   type AuthUser,
 } from "../services/authService";
 
-const TOKEN_KEY = "brewlite_access_token";
+import { TOKEN_KEY, SESSION_EXPIRED, tokenExpiresAt, expireSession } from "../services/session";
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -36,14 +36,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (!token) return;
 
-        const currentUser = await authService.getCurrentUser(token);
+        const currentUser = await authService.getCurrentUser();
 
-        if (active) {
+        if (active && localStorage.getItem(TOKEN_KEY) === token) {
           setUser(currentUser);
         }
       } catch {
         if (active) {
-          localStorage.removeItem(TOKEN_KEY);
+          // authenticatedFetch clears rejected credentials. Keep the token on
+          // temporary network/server failures so a reload can retry the session.
           setUser(null);
         }
       } finally {
@@ -59,6 +60,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    const clear = () => setUser(null);
+    const sync = (event: StorageEvent) => {
+      if (event.key === TOKEN_KEY || event.key === null) window.location.reload();
+    };
+    window.addEventListener(SESSION_EXPIRED, clear);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener(SESSION_EXPIRED, clear);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) return;
+    const check = () => {
+      if (tokenExpiresAt(token) <= Date.now()) expireSession(token);
+    };
+    const timer = window.setTimeout(check, Math.max(0, tokenExpiresAt(token) - Date.now()));
+    window.addEventListener("focus", check);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", check);
+    };
+  }, [user]);
 
   async function login(email: string, password: string) {
     const result = await authService.login(email, password);

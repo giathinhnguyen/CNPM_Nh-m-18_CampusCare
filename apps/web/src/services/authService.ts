@@ -1,3 +1,5 @@
+import { authenticatedFetch } from "./session";
+
 const API_URL =
   import.meta.env.VITE_API_URL ?? "http://localhost:3000/api";
 
@@ -63,12 +65,8 @@ export const authService = {
 
    return readResponse<LoginResponse>(response);
   },
-  async getCurrentUser(token: string): Promise<AuthUser> {
-    const response = await fetch(`${API_URL}/auth/me`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
+  async getCurrentUser(): Promise<AuthUser> {
+    const response = await authenticatedFetch(`${API_URL}/auth/me`);
 
     return readResponse<AuthUser>(response);
   },

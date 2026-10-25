@@ -1,12 +1,17 @@
 import { GoogleLogin } from "@react-oauth/google";
 import { useState, type FormEvent } from "react";
 import { ArrowRight, Coffee, Eye, EyeOff } from "lucide-react";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
 import { Button } from "../components/ui";
 import { useAuth } from "../contexts/AuthContext";
 import { AuthApiError } from "../services/authService";
 
 export default function LoginPage() {
+  const location = useLocation();
+  const from: unknown = location.state?.from;
+  const destination = typeof from === "string" && from.startsWith("/") &&
+    !from.startsWith("//") && !from.includes("\\") && from.split(/[?#]/)[0] !== "/login"
+      ? from : "/";
   const { user, loading, login, googleLogin } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -22,7 +27,7 @@ export default function LoginPage() {
   }
 
   if (user) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={destination} replace />;
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -115,7 +120,7 @@ export default function LoginPage() {
             </h1>
 
             <p className="mt-3 text-sm leading-6 text-[#7a685e]">
-              Đăng nhập để tiếp tục đơn hàng và xem những món bạn yêu thích.
+              {from ? "Vui lòng đăng nhập để tiếp tục truy cập trang này." : "Đăng nhập để tiếp tục đơn hàng và xem những món bạn yêu thích."}
             </p>
 
             <form className="mt-7 space-y-4" onSubmit={submit}>

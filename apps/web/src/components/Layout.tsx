@@ -157,6 +157,7 @@ export default function Layout() {
                         <p className="mt-1 break-words text-xs text-[#8b776b]">
                           {user.email}
                         </p>
+                        <Link to="/account" role="menuitem" className="mt-3 block text-sm underline">Tài khoản của tôi</Link>
                       </div>
 
                       <button
@@ -253,6 +254,7 @@ export default function Layout() {
                     <p className="mt-1 break-words text-xs text-[#8b776b]">
                       {user.email}
                     </p>
+                    <Link to="/account" className="mt-3 block text-sm underline">Tài khoản của tôi</Link>
                   </div>
 
                   <button
