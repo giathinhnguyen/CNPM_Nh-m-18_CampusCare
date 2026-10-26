@@ -18,6 +18,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   googleLogin: (credential: string, password?: string) => Promise<void>;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 
 }
 
@@ -106,8 +107,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
+  async function refreshUser() {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const currentUser = await authService.getCurrentUser();
+    if (token && localStorage.getItem(TOKEN_KEY) === token) setUser(currentUser);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, googleLogin, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, googleLogin, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,14 +1,27 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { ArrowRight, Coffee } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "../components/ui";
-import { authService } from "../services/authService";
+import { authService, type RegistrationChallenge } from "../services/authService";
+import EmailVerificationForm from "../components/EmailVerificationForm";
+
+const PENDING_KEY = "brewlite_pending_registration";
 
 export default function RegisterPage() {
   const location = useLocation();
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [challenge, setChallenge] = useState<RegistrationChallenge | null>(() => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(PENDING_KEY) || "null");
+      return saved && typeof saved.registrationId === "string" && typeof saved.email === "string" && Number.isFinite(Date.parse(saved.expiresAt)) ? saved : null;
+    } catch { return null; }
+  });
+  useEffect(() => {
+    if (challenge) sessionStorage.setItem(PENDING_KEY, JSON.stringify(challenge));
+    else sessionStorage.removeItem(PENDING_KEY);
+  }, [challenge]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -41,7 +54,7 @@ export default function RegisterPage() {
 
     try {
       const result = await authService.register(input);
-      setSuccess(result.message);
+      setChallenge(result);
       form.reset();
     } catch (cause) {
       setError(
@@ -98,7 +111,12 @@ export default function RegisterPage() {
               Tạo tài khoản để tích điểm và theo dõi đơn hàng dễ dàng hơn.
             </p>
 
-            <form className="mt-7 space-y-4" onSubmit={submit}>
+            {challenge && <EmailVerificationForm key={challenge.registrationId} challenge={challenge}
+              onResent={setChallenge}
+              onVerified={(message) => { setChallenge(null); setSuccess(message); setError(""); }}
+              onRestart={() => { setChallenge(null); setSuccess(""); setError(""); }} />}
+            {success && <p role="status" className="mt-7 rounded-xl bg-[#edf3eb] p-3 text-sm text-[#557058]">{success}</p>}
+            {!challenge && !success && <form className="mt-7 space-y-4" onSubmit={submit}>
               <fieldset disabled={loading} className="space-y-4">
                 <label className="block space-y-2 text-sm font-semibold">
                   <span>Họ và tên</span>
@@ -159,7 +177,7 @@ export default function RegisterPage() {
                   type="submit"
                   disabled={loading}
                 >
-                  {loading ? "Đang tạo tài khoản..." : "Tạo tài khoản"}
+                  {loading ? "Đang gửi mã xác minh..." : "Đăng ký và nhận mã xác minh"}
                   <ArrowRight size={17} />
                 </Button>
               </fieldset>
@@ -173,15 +191,7 @@ export default function RegisterPage() {
                 </p>
               )}
 
-              {success && (
-                <p
-                  role="status"
-                  className="rounded-xl bg-[#edf3eb] p-3 text-sm text-[#557058]"
-                >
-                  {success}
-                </p>
-              )}
-            </form>
+            </form>}
 
             <Link to="/login" state={location.state} className="mt-6 block text-center text-sm font-bold text-[#493127] underline underline-offset-4">
               Đăng nhập để tiếp tục

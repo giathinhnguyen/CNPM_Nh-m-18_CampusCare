@@ -11,6 +11,7 @@ import { isEmail } from 'class-validator';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { OAuth2Client } from 'google-auth-library';
 import { Prisma } from '@prisma/client';
+import { EmailVerificationService } from './email-verification.service.js';
 
 @Injectable()
 export class AuthService {
@@ -18,6 +19,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly verification: EmailVerificationService,
   ) {}
 
   async login(body: unknown) {
@@ -85,6 +87,7 @@ export class AuthService {
         fullName: user.fullName,
         role: user.role,
         loyaltyPoints: user.loyaltyPoints,
+        hasPassword: !!user.passwordHash,
       },
     };
   }
@@ -97,6 +100,7 @@ export class AuthService {
       fullName: true,
       role: true,
       loyaltyPoints: true,
+      passwordHash: true,
     },
   });
 
@@ -106,7 +110,8 @@ export class AuthService {
     );
   }
 
-  return user;
+  const { passwordHash, ...profile } = user;
+  return { ...profile, hasPassword: !!passwordHash };
 }
 async googleLogin(body: unknown) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -233,6 +238,7 @@ async googleLogin(body: unknown) {
       fullName: user.fullName,
       role: user.role,
       loyaltyPoints: user.loyaltyPoints,
+      hasPassword: !!user.passwordHash,
     },
   };
 }
@@ -296,44 +302,19 @@ async googleLogin(body: unknown) {
           mode: 'insensitive',
         },
       },
-      select: { id: true },
+      select: { id: true, googleId: true, passwordHash: true },
     });
 
     if (existingUser) {
+      if (existingUser.googleId && !existingUser.passwordHash) {
+        throw new ConflictException('Email này đã có tài khoản Google. Vui lòng đăng nhập bằng Google và đặt mật khẩu BrewLite trong trang Tài khoản.');
+      }
       throw new ConflictException('Email đã được sử dụng.');
     }
 
     // Băm mật khẩu với salt tự động, cost = 12.
     const passwordHash = await hash(password, 12);
 
-    try {
-      const user = await this.prisma.user.create({
-        data: {
-          fullName,
-          email,
-          passwordHash,
-        },
-        select: {
-          id: true,
-          fullName: true,
-          email: true,
-        },
-      });
-
-      return {
-        message: 'Đăng ký thành công.',
-        user,
-      };
-    } catch (error) {
-      // Xử lý trường hợp hai yêu cầu cùng đăng ký một email.
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        throw new ConflictException('Email đã được sử dụng.');
-      }
-
-      throw error;
-    }
+    return this.verification.start({ email, fullName, passwordHash });
   }
 }

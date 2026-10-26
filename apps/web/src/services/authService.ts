@@ -9,6 +9,7 @@ export interface AuthUser {
   fullName: string;
   role: "CUSTOMER" | "ADMIN";
   loyaltyPoints: number;
+  hasPassword: boolean;
 }
 
 interface LoginResponse {
@@ -20,9 +21,11 @@ interface LoginResponse {
 
 export class AuthApiError extends Error {
   readonly code?: string;
-  constructor(message: string, code?: string) {
+  readonly retryAfter?: number;
+  constructor(message: string, code?: string, retryAfter?: number) {
     super(message);
     this.code = code;
+    this.retryAfter = retryAfter;
   }
 }
 
@@ -35,6 +38,7 @@ async function readResponse<T>(response: Response): Promise<T> {
         ? data.message
         : `Yêu cầu thất bại (${response.status}).`,
       typeof data?.code === 'string' ? data.code : undefined,
+      typeof data?.retryAfter === 'number' ? data.retryAfter : undefined,
     );
   }
 
@@ -48,6 +52,22 @@ export interface RegisterInput {
   confirmPassword: string;
 }
 
+export interface RegistrationChallenge {
+  message: string;
+  registrationId: string;
+  email: string;
+  expiresAt: string;
+  resendAfter: number;
+}
+
+export interface PasswordSetupChallenge {
+  challengeId: string;
+  email: string;
+  expiresAt: string;
+  resendAfter: number;
+  message: string;
+}
+
 interface RegisterResponse {
   message: string;
   user: {
@@ -58,7 +78,17 @@ interface RegisterResponse {
 }
 
 export const authService = {
-  async register(input: RegisterInput): Promise<RegisterResponse> {
+  async requestPasswordSetup(): Promise<PasswordSetupChallenge> {
+    return readResponse<PasswordSetupChallenge>(await authenticatedFetch(`${API_URL}/auth/password-setup/request`, { method: "POST" }));
+  },
+
+  async confirmPasswordSetup(challengeId: string, code: string, password: string, confirmPassword: string): Promise<{ message: string }> {
+    return readResponse<{ message: string }>(await authenticatedFetch(`${API_URL}/auth/password-setup/confirm`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ challengeId, code, password, confirmPassword }),
+    }));
+  },
+  async register(input: RegisterInput): Promise<RegistrationChallenge> {
     let response: Response;
 
     try {
@@ -75,17 +105,21 @@ export const authService = {
       );
     }
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => null);
+    return readResponse<RegistrationChallenge>(response);
+  },
 
-      throw new Error(
-        typeof error?.message === "string"
-          ? error.message
-          : "Đăng ký thất bại. Vui lòng thử lại.",
-      );
-    }
+  async verifyEmail(registrationId: string, code: string): Promise<RegisterResponse> {
+    return readResponse<RegisterResponse>(await fetch(`${API_URL}/auth/verify-email`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ registrationId, code }),
+    }));
+  },
 
-    return response.json() as Promise<RegisterResponse>;
+  async resendVerification(registrationId: string): Promise<RegistrationChallenge> {
+    return readResponse<RegistrationChallenge>(await fetch(`${API_URL}/auth/resend-verification`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ registrationId }),
+    }));
   },
 
   async login(email: string, password: string): Promise<LoginResponse> {

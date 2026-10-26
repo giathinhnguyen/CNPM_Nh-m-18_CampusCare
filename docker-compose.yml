@@ -21,6 +21,7 @@ services:
       - .:/workspace
       - root_node_modules:/workspace/node_modules
       - web_node_modules:/workspace/apps/web/node_modules
+      - api_node_modules:/workspace/apps/api/node_modules
     environment:
       VITE_API_URL: http://localhost:3000/api
       VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
@@ -47,12 +48,18 @@ services:
       - .:/workspace
       - root_node_modules:/workspace/node_modules
       - api_node_modules:/workspace/apps/api/node_modules
+      - web_node_modules:/workspace/apps/web/node_modules
     environment:
       NODE_ENV: development
       PORT: 3000
       WEB_ORIGIN: http://localhost:5173
       JWT_SECRET: ${JWT_SECRET}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
       DATABASE_URL: postgresql://brewlite:brewlite@postgres:5432/brewlite
     depends_on:
       postgres:

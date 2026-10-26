@@ -1,32 +1,18 @@
 import { BadRequestException, ConflictException, UnauthorizedException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { compare } from 'bcryptjs';
-import { describe, it, expect, vi } from 'vitest';
-import { AuthService } from './auth.service.js';
-import { PrismaService } from '../prisma/prisma.service.js';
+import { describe, it, expect } from 'vitest';
+import { verificationFixture as fixture } from '../../test/verification-fixture.js';
 
 const id = '12345678-1234-4234-8234-123456789abc';
 const input = { fullName: ' Khách hàng ', email: ' TEST@example.com ', password: 'password123', confirmPassword: 'password123' };
 
-function fixture() {
-  let saved: Record<string, unknown> | null = null;
-  const user = {
-    findFirst: vi.fn(async () => saved),
-    findUnique: vi.fn(async () => saved),
-    create: vi.fn(async ({ data, select }: { data: Record<string, unknown>; select?: unknown }) => {
-      saved = { id, role: 'CUSTOMER', loyaltyPoints: 0, ...data };
-      return select ? { id, fullName: data.fullName, email: data.email } : saved;
-    }),
-  };
-  const jwt = new JwtService({ secret: 'integration-test-secret', signOptions: { expiresIn: '1h' } });
-  const service = new AuthService({ user } as unknown as PrismaService, jwt);
-  return { service, user, jwt, saved: () => saved };
-}
-
 describe('Integrated email registration and login', () => {
   it('registers a bcrypt account, logs in with the same password, and retrieves its profile', async () => {
     const f = fixture();
-    const registered = await f.service.register(input);
+    const challenge = await f.service.register(input);
+    expect(f.saved()).toBeNull();
+    await expect(f.service.login({ email: input.email, password: input.password })).rejects.toBeInstanceOf(UnauthorizedException);
+    const registered = await f.verification.verify({ registrationId: challenge.registrationId, code: f.code() });
     expect(registered.user.email).toBe('test@example.com');
     expect(registered.user.fullName).toBe('Khách hàng');
     expect(registered.user).not.toHaveProperty('passwordHash');
