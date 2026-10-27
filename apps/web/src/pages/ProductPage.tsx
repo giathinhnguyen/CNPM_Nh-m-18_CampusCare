@@ -133,8 +133,8 @@ export default function ProductPage() {
             </div>
           </div>
 
-          <OptionGroup title="Độ ngọt" options={["120%", "100%", "70%", "50%", "0%"]} value={sweetness} onChange={setSweetness} />
-          <OptionGroup title="Mức đá" options={["120%", "100%", "70%", "50%", "0%"]} value={ice} onChange={setIce} />
+        <OptionGroup title="Độ ngọt" options={["120%", "100%", "50%", "0%"]} value={sweetness} onChange={setSweetness} />
+        <OptionGroup title="Mức đá" options={["120%", "100%", "50%", "0%"]} value={ice} onChange={setIce} />
 
           <div className="mt-9 flex items-center justify-between gap-5">
             <h2 className="font-serif text-2xl text-[#3b2a22]">Số lượng</h2>

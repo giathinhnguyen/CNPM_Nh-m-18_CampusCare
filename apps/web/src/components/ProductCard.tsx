@@ -12,7 +12,7 @@ export default function ProductCard({ product }: { product: Product }) {
     <article className="group overflow-hidden rounded-[1.75rem] border border-[#e4dad0] bg-white shadow-[0_12px_40px_rgba(68,44,32,0.06)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_18px_48px_rgba(68,44,32,0.12)]">
       <Link
         to={`/products/${product.id}`}
-        className="relative block aspect-[4/4.5] overflow-hidden bg-[#e9e1d7]"
+      className="relative block aspect-[4/3] overflow-hidden bg-[#e9e1d7]"
         aria-label={`Xem ${product.name}`}
       >
         {product.imageUrl ? (
@@ -39,21 +39,21 @@ export default function ProductCard({ product }: { product: Product }) {
           </div>
         )}
       </Link>
-      <div className="p-5">
+      <div className="p-4">
         <div className="flex items-center justify-between gap-3">
           <span className="text-xs font-bold uppercase tracking-wider text-[#8a7567]">
             {product.category.name}
           </span>
         </div>
         <Link to={`/products/${product.id}`}>
-          <h2 className="mt-2 font-serif text-[1.35rem] leading-snug text-[#302018] transition group-hover:text-[#71503d]">
+          <h2 className="mt-1.5 font-serif text-[1.25rem] leading-snug text-[#302018] transition group-hover:text-[#71503d]">
             {product.name}
           </h2>
         </Link>
-        <p className="mt-1.5 line-clamp-2 min-h-10 text-sm leading-5 text-[#7e6b60]">
+        <p className="mt-1 line-clamp-1 min-h-5 text-sm leading-5 text-[#7e6b60]">
           {product.description ?? ""}
         </p>
-        <div className="mt-5 flex items-center justify-between gap-3">
+        <div className="mt-3.5 flex items-center justify-between gap-3">
           <div>
             <p className="font-bold text-[#3c2a22]">
               {formatCurrency(product.basePrice)}
