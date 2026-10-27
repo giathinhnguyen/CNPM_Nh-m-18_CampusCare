@@ -108,6 +108,7 @@ export default function ProductPage() {
         iceLevel: mapLevelToEnum(ice),
         quantity,
         unitPrice: price + toppingTotal,
+        stockQuantity: product.stockQuantity,
         toppingIds: selectedToppings,
         toppings: toppings.filter(t => selectedToppings.includes(t.id)), // 👈 Bổ sung tên topping
       }, !!user)
