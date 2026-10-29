@@ -16,11 +16,18 @@ export const cartService = {
                 try {
                     const localItems = JSON.parse(localData);
                     if (Array.isArray(localItems) && localItems.length > 0) {
-                        await authenticatedFetch(`${API_BASE}/cart/sync`, {
+                        const syncRes = await authenticatedFetch(`${API_BASE}/cart/sync`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ items: localItems }),
                         });
+                        if (syncRes.ok) {
+                            const syncData = await syncRes.json();
+                            // Lưu cảnh báo vượt tồn kho vào sessionStorage để CartPage đọc và hiển thị
+                            if (Array.isArray(syncData.warnings) && syncData.warnings.length > 0) {
+                                sessionStorage.setItem('brewlite_sync_warnings', JSON.stringify(syncData.warnings));
+                            }
+                        }
                     }
                 } catch (err) {
                     console.error("Lỗi đồng bộ giỏ hàng:", err);
@@ -55,7 +62,10 @@ export const cartService = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(itemData),
             });
-            if (!res.ok) throw new Error('Thêm vào giỏ thất bại');
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.message || 'Thêm vào giỏ thất bại');
+            }
             return res.json();
         }
 
@@ -64,6 +74,17 @@ export const cartService = {
         // Nếu chưa đăng nhập: Lưu vào LocalStorage
         const localData = localStorage.getItem(LOCAL_STORAGE_KEY);
         let items: any[] = localData ? JSON.parse(localData) : [];
+
+        // Kiểm tra tồn kho cho khách vãng lai
+        const currentQtyInCart = items
+            .filter((i) => i.productId === itemData.productId)
+            .reduce((sum: number, i: any) => sum + i.quantity, 0);
+
+        if (itemData.stockQuantity !== undefined && currentQtyInCart + quantity > itemData.stockQuantity) {
+            throw new Error(
+                `Hiện số lượng tối đa của món ${itemData.productName || itemData.name || "này"} là ${itemData.stockQuantity} ly (tính cả các lựa chọn đã có trong giỏ).`
+            );
+        }
 
         const existingIndex = items.findIndex(
             (i) =>
@@ -100,13 +121,28 @@ export const cartService = {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ quantity }),
             });
-            if (!res.ok) throw new Error('Cập nhật thất bại');
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.message || 'Cập nhật thất bại');
+            }
             return res.json();
         }
 
         const localData = localStorage.getItem(LOCAL_STORAGE_KEY);
         if (!localData) return;
         let items: any[] = JSON.parse(localData);
+
+        const currentItem = items.find((i) => i.id === itemId);
+        if (currentItem && quantity > currentItem.quantity) {
+            const currentOtherQty = items
+                .filter((i) => i.id !== itemId && i.productId === currentItem.productId)
+                .reduce((sum: number, i: any) => sum + i.quantity, 0);
+            if (currentItem.stockQuantity !== undefined && currentOtherQty + quantity > currentItem.stockQuantity) {
+                throw new Error(
+                    `Hiện số lượng tối đa của món ${currentItem.productName || currentItem.name || "này"} là ${currentItem.stockQuantity} ly (tính cả các lựa chọn đã có trong giỏ).`
+                );
+            }
+        }
 
         if (quantity <= 0) {
             items = items.filter((i) => i.id !== itemId);
@@ -133,6 +169,27 @@ export const cartService = {
         const localData = localStorage.getItem(LOCAL_STORAGE_KEY);
         if (!localData) return;
         const items = JSON.parse(localData).filter((i: any) => i.id !== itemId);
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
+    },
+
+    // 5. CẬP NHẬT GHI CHÚ
+    updateNote: async (itemId: string, note: string, isLoggedIn: boolean) => {
+        if (isLoggedIn) {
+            try {
+                await authenticatedFetch(`${API_BASE}/cart/items/${itemId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ note }),
+                });
+            } catch (err) {
+                console.warn("Lỗi lưu ghi chú trên server", err);
+            }
+        }
+
+        const localData = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (!localData) return;
+        let items: any[] = JSON.parse(localData);
+        items = items.map((i: any) => (i.id === itemId ? { ...i, note } : i));
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
     },
 };

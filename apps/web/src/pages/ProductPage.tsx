@@ -1,6 +1,6 @@
-import { ArrowLeft, Check, CheckCircle2, Package, Plus, ShieldCheck } from "lucide-react"
+import { ArrowLeft, Check, CheckCircle2, Package, Plus, ShieldCheck, X } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { catalogService } from "../services/catalogService"
 import { cartService } from "../services/cartService"
 import { useAuth } from "../contexts/AuthContext"
@@ -36,6 +36,16 @@ export default function ProductPage() {
   // State cho quá trình bấm nút thêm vào giỏ
   const [adding, setAdding] = useState(false)
   const [addSuccess, setAddSuccess] = useState(false)
+  const [toast, setToast] = useState<{ message: string; type?: "success" | "info" | "error" } | null>(null)
+  const toastTimeoutRef = useRef<number | null>(null)
+
+  const showToast = (message: string, type: "success" | "info" | "error" = "success") => {
+    if (toastTimeoutRef.current) window.clearTimeout(toastTimeoutRef.current)
+    setToast({ message, type })
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToast(null)
+    }, 3200)
+  }
 
   useEffect(() => {
     if (!id) return
@@ -98,6 +108,21 @@ export default function ProductPage() {
     if (!product || !selected?.id) return
     try {
       setAdding(true)
+
+      // Kiểm tra tổng số lượng đã có trong giỏ hàng
+      const cartData = await cartService.getCart(Boolean(user))
+      const inCart = (cartData.items || [])
+        .filter((item: any) => item.productId === product.id)
+        .reduce((sum: number, item: any) => sum + item.quantity, 0)
+
+      if (quantity + inCart > product.stockQuantity) {
+        showToast(
+          `Hiện số lượng tối đa của món ${product.name} là ${product.stockQuantity} ly (tính cả các lựa chọn đã có trong giỏ).`,
+          "error",
+        )
+        return
+      }
+
       await cartService.addToCart({
         productId: product.id,
         productName: product.name,
@@ -114,9 +139,10 @@ export default function ProductPage() {
       }, !!user)
 
       setAddSuccess(true)
+      showToast(`Đã thêm ${quantity} ly ${product.name} vào giỏ hàng`, "success")
       setTimeout(() => setAddSuccess(false), 2000)
     } catch (err: any) {
-      alert(err.message || "Thêm vào giỏ hàng thất bại")
+      showToast(err.message || "Thêm vào giỏ hàng thất bại", "error")
     } finally {
       setAdding(false)
     }
@@ -191,7 +217,38 @@ export default function ProductPage() {
             <div className="flex items-center gap-7 rounded-full border border-[#e0d4c9] bg-white px-5 py-3">
               <button type="button" aria-label="Giảm số lượng" onClick={() => setQuantity((value) => Math.max(1, value - 1))} className="text-2xl text-[#8d796d]">−</button>
               <span className="min-w-4 text-center font-bold text-[#3b2a22]">{quantity}</span>
-              <button type="button" aria-label="Tăng số lượng" onClick={() => setQuantity((value) => Math.min(product.stockQuantity, value + 1))} className="text-2xl text-[#3b2a22]">+</button>
+              <button
+                type="button"
+                aria-label="Tăng số lượng"
+                onClick={async () => {
+                  try {
+                    const cartData = await cartService.getCart(Boolean(user))
+                    const inCart = (cartData.items || [])
+                      .filter((item: any) => item.productId === product.id)
+                      .reduce((sum: number, item: any) => sum + item.quantity, 0)
+                    if (quantity + inCart >= product.stockQuantity) {
+                      showToast(
+                        `Hiện số lượng tối đa của món ${product.name} là ${product.stockQuantity} ly (tính cả các lựa chọn đã có trong giỏ).`,
+                        "error",
+                      )
+                      return
+                    }
+                    setQuantity((value) => value + 1)
+                  } catch {
+                    if (quantity >= product.stockQuantity) {
+                      showToast(
+                        `Hiện số lượng tối đa của món ${product.name} là ${product.stockQuantity} ly (tính cả các lựa chọn đã có trong giỏ).`,
+                        "error",
+                      )
+                      return
+                    }
+                    setQuantity((value) => value + 1)
+                  }
+                }}
+                className="text-2xl text-[#3b2a22]"
+              >
+                +
+              </button>
             </div>
           </div>
 
@@ -231,6 +288,29 @@ export default function ProductPage() {
           </div>
         </div>
       </section>
+
+      {/* TOAST THÔNG BÁO */}
+      {toast && (
+        <div
+          className="fixed right-4 top-20 z-50 flex max-w-sm items-start gap-2.5 rounded-2xl border p-3.5 text-left text-xs font-medium leading-5 shadow-xl backdrop-blur transition-all"
+          style={{
+            borderColor: toast.type === "error" ? "#efc3bd" : toast.type === "info" ? "#ddd2c8" : "#b9d0b9",
+            backgroundColor: toast.type === "error" ? "rgba(255, 242, 240, 0.95)" : toast.type === "info" ? "rgba(255, 255, 255, 0.95)" : "rgba(237, 245, 236, 0.95)",
+            color: toast.type === "error" ? "#8c382e" : toast.type === "info" ? "#49372e" : "#31583b",
+          }}
+          role="status"
+        >
+          <span className="min-w-0 flex-1 break-words">{toast.message}</span>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="mt-0.5 shrink-0 opacity-70 hover:opacity-100"
+            aria-label="Đóng thông báo"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
     </main>
   )
 }

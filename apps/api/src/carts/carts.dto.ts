@@ -11,5 +11,7 @@ export class AddToCartDto {
 }
 
 export class UpdateQuantityDto {
-    quantity: number;
+    quantity?: number;
+    note?: string;
+    isSelected?: boolean;
 }

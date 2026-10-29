@@ -27,7 +27,7 @@ export class CartsController {
         @Body() dto: UpdateQuantityDto
     ) {
         const userId = (req as any).user?.id || req.user.id;
-        return this.cartsService.updateQuantity(userId, id, dto.quantity);
+        return this.cartsService.updateQuantity(userId, id, dto.quantity, dto.note, dto.isSelected);
     }
 
     @Delete('items/:id')
