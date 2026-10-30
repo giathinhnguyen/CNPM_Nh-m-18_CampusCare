@@ -78,6 +78,32 @@ enum RewardRedemptionStatus {
   @@map("reward_redemption_status_enum")
 }
 
+// Pending registrations are not users and cannot receive login tokens.
+model EmailRegistration {
+  id           String   @id @db.Uuid
+  email        String   @unique @db.VarChar(255)
+  fullName     String   @map("full_name") @db.VarChar(100)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  codeHash     String   @map("code_hash") @db.VarChar(255)
+  attempts     Int      @default(0)
+  expiresAt    DateTime @map("expires_at") @db.Timestamptz(6)
+  sentAt       DateTime @map("sent_at") @db.Timestamptz(6)
+
+  @@map("email_registrations")
+}
+
+model PasswordSetupChallenge {
+  id        String   @id @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
+  codeHash  String   @map("code_hash") @db.VarChar(255)
+  attempts  Int      @default(0)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  sentAt    DateTime @map("sent_at") @db.Timestamptz(6)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_setup_challenges")
+}
+
 model User {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email         String   @unique @db.VarChar(255)
@@ -93,6 +119,7 @@ model User {
   orders              Order[]
   loyaltyTransactions LoyaltyTransaction[]
   rewardRedemptions   RewardRedemption[]
+  passwordSetupChallenge PasswordSetupChallenge?
 
   @@map("users")
 }

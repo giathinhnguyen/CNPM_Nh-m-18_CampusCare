@@ -1,3 +1,4 @@
+import { useAuth } from "../contexts/AuthContext";
 import { useEffect, useRef, useState } from "react";
 import {
   CircleUserRound,
@@ -21,10 +22,18 @@ const navItems = [
 ];
 
 export default function Layout() {
+  const { user, loading, logout } = useAuth();
+
   const [mobileOpen, setMobileOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
+
+  function handleLogout() {
+    logout();
+    setAccountOpen(false);
+    setMobileOpen(false);
+  }
 
   useEffect(() => {
     const closeMenus = () => {
@@ -99,14 +108,17 @@ export default function Layout() {
           </nav>
 
           {/* HEADER ACTIONS */}
+          {/* HEADER ACTIONS */}
           <div className="flex items-center gap-2">
-        <span
-          aria-label="Giỏ hàng - đang phát triển"
-          title="Giỏ hàng đang được phát triển"
-          className="relative grid size-11 cursor-not-allowed place-items-center rounded-full border border-[#e3d8cd] bg-white text-[#a9988d]"
-        >
+            {/* ĐÃ MỞ KHÓA GIỎ HÀNG */}
+            <Link
+              to="/cart"
+              aria-label="Giỏ hàng của bạn"
+              title="Xem giỏ hàng"
+              className="relative grid size-11 place-items-center rounded-full border border-[#e3d8cd] bg-white text-[#493227] transition hover:border-[#aa8b75] hover:bg-[#f5eee7]"
+            >
               <ShoppingBag size={19} strokeWidth={1.8} />
-        </span>
+            </Link>
 
             {/* ACCOUNT DROPDOWN */}
             <div ref={accountRef} className="relative hidden sm:block">
@@ -118,7 +130,9 @@ export default function Layout() {
                 className="flex h-11 items-center gap-2 rounded-full border border-[#e3d8cd] bg-white px-4 text-sm font-semibold text-[#493227] transition hover:border-[#aa8b75] hover:bg-[#f5eee7]"
               >
                 <CircleUserRound size={19} strokeWidth={1.8} />
-                <span>Đăng nhập</span>
+                <span>
+                  {loading ? "Đang tải..." : user ? user.fullName : "Đăng nhập"}
+                </span>
                 <ChevronDown
                   size={15}
                   className={cx(
@@ -133,28 +147,57 @@ export default function Layout() {
                   role="menu"
                   className="absolute right-0 top-[calc(100%+12px)] z-50 w-60 rounded-2xl border border-[#e4d9cf] bg-white p-2 shadow-[0_18px_48px_rgba(61,39,29,0.14)]"
                 >
-                  <p className="px-3 pb-3 pt-2 text-xs leading-5 text-[#8b776b]">
-                    Đăng nhập để quản lý đơn hàng và tích điểm thưởng.
-                  </p>
+                  {loading ? (
+                    <p className="px-3 py-2 text-sm text-[#8b776b]">
+                      Đang kiểm tra phiên đăng nhập...
+                    </p>
+                  ) : user ? (
+                    <>
+                      <div className="px-3 py-2">
+                        <p className="break-words text-sm font-semibold">
+                          {user.fullName}
+                        </p>
+                        <p className="mt-1 break-words text-xs text-[#8b776b]">
+                          {user.email}
+                        </p>
+                        <Link to="/account" role="menuitem" className="mt-3 block text-sm underline">Tài khoản của tôi</Link>
+                      </div>
 
-                  <Link
-                    role="menuitem"
-                    to="/login"
-                    onClick={() => setAccountOpen(false)}
-                    className="flex items-center justify-between rounded-xl bg-[#3b241c] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#56372a]"
-                  >
-                    Đăng nhập
-                    <ArrowRight size={16} />
-                  </Link>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={handleLogout}
+                        className="mt-2 w-full rounded-xl bg-[#3b241c] px-4 py-3 text-sm font-semibold text-white hover:bg-[#56372a]"
+                      >
+                        Đăng xuất
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="px-3 pb-3 pt-2 text-xs leading-5 text-[#8b776b]">
+                        Đăng nhập để quản lý đơn hàng và tích điểm thưởng.
+                      </p>
 
-                  <Link
-                    role="menuitem"
-                    to="/register"
-                    onClick={() => setAccountOpen(false)}
-                    className="mt-2 flex items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold text-[#4b3529] transition hover:bg-[#f5f0ea]"
-                  >
-                    Tạo tài khoản
-                  </Link>
+                      <Link
+                        role="menuitem"
+                        to="/login"
+                        onClick={() => setAccountOpen(false)}
+                        className="flex items-center justify-between rounded-xl bg-[#3b241c] px-4 py-3 text-sm font-semibold text-white hover:bg-[#56372a]"
+                      >
+                        Đăng nhập
+                        <ArrowRight size={16} />
+                      </Link>
+
+                      <Link
+                        role="menuitem"
+                        to="/register"
+                        onClick={() => setAccountOpen(false)}
+                        className="mt-2 flex items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold text-[#4b3529] hover:bg-[#f5f0ea]"
+                      >
+                        Tạo tài khoản
+                      </Link>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -176,7 +219,7 @@ export default function Layout() {
         {mobileOpen && (
           <div className="border-t border-[#e7ded4] bg-[#faf7f2] px-4 py-4 shadow-lg md:hidden">
             <nav className="mx-auto flex max-w-7xl flex-col gap-1">
-            {navItems.map((item) => item.enabled ? (
+              {navItems.map((item) => item.enabled ? (
                 <NavLink
                   key={item.to}
                   to={item.to}
@@ -192,30 +235,58 @@ export default function Layout() {
                   }
                 >
                   {item.label}
-              </NavLink>
-            ) : (
-              <span key={item.to} className="cursor-not-allowed rounded-xl px-4 py-3 text-sm font-semibold text-[#b7a89d]">
-                {item.label}
-              </span>
-            ))}
+                </NavLink>
+              ) : (
+                <span key={item.to} className="cursor-not-allowed rounded-xl px-4 py-3 text-sm font-semibold text-[#b7a89d]">
+                  {item.label}
+                </span>
+              ))}
 
               <div className="my-2 border-t border-[#e7ded4]" />
 
-              <Link
-                to="/login"
-                onClick={() => setMobileOpen(false)}
-                className="rounded-xl px-4 py-3 text-sm font-semibold text-[#624c3e] hover:bg-[#eee6dc]"
-              >
-                Đăng nhập
-              </Link>
+              {loading ? (
+                <p className="px-4 py-3 text-sm text-[#8b776b]">
+                  Đang kiểm tra phiên đăng nhập...
+                </p>
+              ) : user ? (
+                <>
+                  <div className="px-4 py-3">
+                    <p className="break-words text-sm font-semibold">
+                      {user.fullName}
+                    </p>
+                    <p className="mt-1 break-words text-xs text-[#8b776b]">
+                      {user.email}
+                    </p>
+                    <Link to="/account" className="mt-3 block text-sm underline">Tài khoản của tôi</Link>
+                  </div>
 
-              <Link
-                to="/register"
-                onClick={() => setMobileOpen(false)}
-                className="rounded-xl px-4 py-3 text-sm font-semibold text-[#624c3e] hover:bg-[#eee6dc]"
-              >
-                Tạo tài khoản
-              </Link>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="rounded-xl px-4 py-3 text-left text-sm font-semibold text-[#624c3e] hover:bg-[#eee6dc]"
+                  >
+                    Đăng xuất
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    onClick={() => setMobileOpen(false)}
+                    className="rounded-xl px-4 py-3 text-sm font-semibold text-[#624c3e] hover:bg-[#eee6dc]"
+                  >
+                    Đăng nhập
+                  </Link>
+
+                  <Link
+                    to="/register"
+                    onClick={() => setMobileOpen(false)}
+                    className="rounded-xl px-4 py-3 text-sm font-semibold text-[#624c3e] hover:bg-[#eee6dc]"
+                  >
+                    Tạo tài khoản
+                  </Link>
+                </>
+              )}
             </nav>
           </div>
         )}
@@ -262,9 +333,11 @@ export default function Layout() {
               <Link to="/" className="transition hover:text-white">
                 Menu hôm nay
               </Link>
-          <span className="cursor-not-allowed text-[#8d7b70]" title="Chức năng đang được phát triển">Khuyến mãi</span>
-          <span className="cursor-not-allowed text-[#8d7b70]" title="Chức năng đang được phát triển">Đơn hàng của tôi</span>
-          <span className="cursor-not-allowed text-[#8d7b70]" title="Chức năng đang được phát triển">Giỏ hàng</span>
+              <span className="cursor-not-allowed text-[#8d7b70]" title="Chức năng đang được phát triển">Khuyến mãi</span>
+              <span className="cursor-not-allowed text-[#8d7b70]" title="Chức năng đang được phát triển">Đơn hàng của tôi</span>
+              <Link to="/cart" className="transition hover:text-white">
+                Giỏ hàng
+              </Link>
             </div>
           </div>
 
