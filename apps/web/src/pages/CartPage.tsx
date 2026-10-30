@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, LogIn, Minus, Plus, Tag, Trash2, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  LogIn,
+  Minus,
+  Plus,
+  Tag,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
   Button,
@@ -21,7 +30,9 @@ const formatSizeLabel = (size: any) => {
   if (!size) return "Size M · Vừa (500ml)";
   if (typeof size === "object") {
     const id = size.id || size.size || "M";
-    const label = size.label ? ` · ${size.label.split(" · ")[1] || size.label}` : "";
+    const label = size.label
+      ? ` · ${size.label.split(" · ")[1] || size.label}`
+      : "";
     return `Size ${id}${label}`;
   }
   const sizeMap: Record<string, string> = {
@@ -36,7 +47,8 @@ const formatSizeLabel = (size: any) => {
 const formatLevel = (level: any) => {
   if (level === undefined || level === null) return "100%";
   if (typeof level === "number") return `${level}%`;
-  if (typeof level === "object" && level.value !== undefined) return `${level.value}%`;
+  if (typeof level === "object" && level.value !== undefined)
+    return `${level.value}%`;
   switch (String(level).toUpperCase()) {
     case "ONE_TWENTY":
       return "120%";
@@ -66,10 +78,16 @@ export default function CartPage() {
   const [pendingRemoval, setPendingRemoval] = useState<string | null>(null);
 
   // Toast thông báo
-  const [toast, setToast] = useState<{ message: string; type?: "success" | "info" | "error" } | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type?: "success" | "info" | "error";
+  } | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
 
-  const showToast = (message: string, type: "success" | "info" | "error" = "success") => {
+  const showToast = (
+    message: string,
+    type: "success" | "info" | "error" = "success",
+  ) => {
     if (toastTimeoutRef.current) window.clearTimeout(toastTimeoutRef.current);
     setToast({ message, type });
     toastTimeoutRef.current = window.setTimeout(() => {
@@ -107,42 +125,54 @@ export default function CartPage() {
   useEffect(() => {
     void fetchCart(false).then(() => {
       // Đọc cảnh báo từ sync giỏ hàng (khi vừa đăng nhập)
-      const rawWarnings = sessionStorage.getItem('brewlite_sync_warnings');
+      const rawWarnings = sessionStorage.getItem("brewlite_sync_warnings");
       if (rawWarnings) {
-        sessionStorage.removeItem('brewlite_sync_warnings');
+        sessionStorage.removeItem("brewlite_sync_warnings");
         try {
           const warnings: string[] = JSON.parse(rawWarnings);
           if (warnings.length > 0) {
             // Hiển thị từng cảnh báo, cách nhau 1.5 giây
             warnings.forEach((msg, idx) => {
-              window.setTimeout(() => showToast(msg, 'error'), idx * 1600);
+              window.setTimeout(() => showToast(msg, "error"), idx * 1600);
             });
           }
-        } catch { /* bỏ qua nếu lỗi parse */ }
+        } catch {
+          /* bỏ qua nếu lỗi parse */
+        }
       }
     });
   }, [user]);
 
   // Kiểm tra món hết hàng
   const isUnavailable = (item: any) =>
-    Boolean(item.isOutOfStock || item.unavailable || (item.stockQuantity !== undefined && item.stockQuantity <= 0));
+    Boolean(
+      item.isOutOfStock ||
+      item.unavailable ||
+      (item.stockQuantity !== undefined && item.stockQuantity <= 0),
+    );
 
   const availableItems = cartItems.filter((item) => !isUnavailable(item));
   const allSelected =
     availableItems.length > 0 && selectedIds.length === availableItems.length;
 
-  const selectedItems = cartItems.filter((item) => selectedIds.includes(item.id));
+  const selectedItems = cartItems.filter((item) =>
+    selectedIds.includes(item.id),
+  );
   const subtotal = selectedItems.reduce(
     (sum, item) => sum + (item.unitPrice || item.price || 0) * item.quantity,
     0,
   );
-  const activeDiscount = appliedPromo ? getPromotionDiscount(appliedPromo, subtotal) : 0;
+  const activeDiscount = appliedPromo
+    ? getPromotionDiscount(appliedPromo, subtotal)
+    : 0;
   const total = Math.max(0, subtotal - activeDiscount);
 
   // Chọn / bỏ chọn 1 món
   const toggleItem = (id: string) => {
     setSelectedIds((current) =>
-      current.includes(id) ? current.filter((key) => key !== id) : [...current, id],
+      current.includes(id)
+        ? current.filter((key) => key !== id)
+        : [...current, id],
     );
   };
 
@@ -152,7 +182,11 @@ export default function CartPage() {
   };
 
   // 2. Cập nhật số lượng & Chặn khi vượt quá số lượng mua
-  const handleUpdateQuantity = async (itemId: string, currentQty: number, delta: number) => {
+  const handleUpdateQuantity = async (
+    itemId: string,
+    currentQty: number,
+    delta: number,
+  ) => {
     const item = cartItems.find((i) => i.id === itemId);
     if (!item) return;
 
@@ -184,7 +218,11 @@ export default function CartPage() {
       setCartItems((prev) =>
         prev.map((i) =>
           i.id === itemId
-            ? { ...i, quantity: newQty, totalPrice: (i.unitPrice || i.price || 0) * newQty }
+            ? {
+                ...i,
+                quantity: newQty,
+                totalPrice: (i.unitPrice || i.price || 0) * newQty,
+              }
             : i,
         ),
       );
@@ -234,7 +272,9 @@ export default function CartPage() {
       return;
     }
     if (subtotal < promotion.minSpend) {
-      setPromoError(`Đơn hàng chưa đạt mức tối thiểu ${formatCurrency(promotion.minSpend)}.`);
+      setPromoError(
+        `Đơn hàng chưa đạt mức tối thiểu ${formatCurrency(promotion.minSpend)}.`,
+      );
       return;
     }
     setAppliedPromo(normalized);
@@ -250,7 +290,10 @@ export default function CartPage() {
       return;
     }
 
-    localStorage.setItem("brewlite_checkout_selection", JSON.stringify(selectedIds));
+    localStorage.setItem(
+      "brewlite_checkout_selection",
+      JSON.stringify(selectedIds),
+    );
     if (appliedPromo) {
       localStorage.setItem("brewlite_applied_promo", appliedPromo);
     }
@@ -321,8 +364,12 @@ export default function CartPage() {
             const unavailable = isUnavailable(item);
             const isSelected = selectedIds.includes(item.id);
             const itemPrice = item.unitPrice || item.price || 0;
-            const itemImg = item.imageUrl || item.image || "https://images.unsplash.com/photo-1541167760496-1628856ab772";
-            const itemName = item.productName || item.name || "Thức uống BrewLite";
+            const itemImg =
+              item.imageUrl ||
+              item.image ||
+              "https://images.unsplash.com/photo-1541167760496-1628856ab772";
+            const itemName =
+              item.productName || item.name || "Thức uống BrewLite";
 
             return (
               <article
@@ -371,7 +418,8 @@ export default function CartPage() {
 
                   {item.isReward && (
                     <span className="mt-1.5 inline-flex rounded-full bg-[#e5eee3] px-2.5 py-1 text-[0.65rem] font-bold uppercase tracking-wide text-[#31583b]">
-                      Đổi thưởng · {item.rewardPoints?.toLocaleString("vi-VN")} điểm
+                      Đổi thưởng · {item.rewardPoints?.toLocaleString("vi-VN")}{" "}
+                      điểm
                     </span>
                   )}
 
@@ -381,13 +429,15 @@ export default function CartPage() {
 
                   <p className="mt-1 truncate text-xs text-[#958379]">
                     {item.toppings?.length
-                      ? item.toppings.map((topping: any) => topping.name).join(", ")
+                      ? item.toppings
+                          .map((topping: any) => topping.name)
+                          .join(", ")
                       : "Không thêm topping"}
                   </p>
 
                   <p className="mt-1 text-xs text-[#958379]">
-                    Ngọt {formatLevel(item.sweetnessLevel ?? item.sweetness)} · Đá{" "}
-                    {formatLevel(item.iceLevel ?? item.ice)}
+                    Ngọt {formatLevel(item.sweetnessLevel ?? item.sweetness)} ·
+                    Đá {formatLevel(item.iceLevel ?? item.ice)}
                   </p>
 
                   {/* GHI CHÚ CHO MÓN */}
@@ -402,7 +452,10 @@ export default function CartPage() {
                       id={`note-${item.id}`}
                       value={item.note ?? ""}
                       onChange={(event) =>
-                        handleUpdateNote(item.id, event.target.value.slice(0, 80))
+                        handleUpdateNote(
+                          item.id,
+                          event.target.value.slice(0, 80),
+                        )
                       }
                       placeholder="Ví dụ: Không dùng ống hút, để riêng topping..."
                       rows={1}
@@ -433,8 +486,14 @@ export default function CartPage() {
                         <button
                           type="button"
                           className="grid size-8 place-items-center rounded-full hover:bg-[#eee6dc] disabled:opacity-40"
-                          onClick={() => handleUpdateQuantity(item.id, item.quantity, -1)}
-                          disabled={item.quantity === 1 || unavailable || updatingId === item.id}
+                          onClick={() =>
+                            handleUpdateQuantity(item.id, item.quantity, -1)
+                          }
+                          disabled={
+                            item.quantity === 1 ||
+                            unavailable ||
+                            updatingId === item.id
+                          }
                           aria-label={`Giảm số lượng ${itemName}`}
                         >
                           <Minus size={14} />
@@ -445,8 +504,14 @@ export default function CartPage() {
                         <button
                           type="button"
                           className="grid size-8 place-items-center rounded-full hover:bg-[#eee6dc] disabled:opacity-40"
-                          onClick={() => handleUpdateQuantity(item.id, item.quantity, 1)}
-                          disabled={item.isReward || unavailable || updatingId === item.id}
+                          onClick={() =>
+                            handleUpdateQuantity(item.id, item.quantity, 1)
+                          }
+                          disabled={
+                            item.isReward ||
+                            unavailable ||
+                            updatingId === item.id
+                          }
                           aria-label={`Tăng số lượng ${itemName}`}
                         >
                           <Plus size={14} />
@@ -454,9 +519,11 @@ export default function CartPage() {
                       </div>
 
                       {/* ĐƠN GIÁ THEO LY */}
-                      <p className="text-xs text-[#7e6b60]">
-                        Đơn giá {formatCurrency(itemPrice)}/ly
-                      </p>
+                      {item.quantity >= 2 && (
+                        <p className="text-xs text-[#7e6b60]">
+                          Đơn giá {formatCurrency(itemPrice)}/ly
+                        </p>
+                      )}
                     </div>
 
                     {/* NÚT XÓA MÓN */}
@@ -522,7 +589,9 @@ export default function CartPage() {
           <div className="my-5 h-px bg-[#ece4dc]" />
 
           <div className="flex items-end justify-between">
-            <span className="font-semibold text-[#302018]">Tổng thanh toán</span>
+            <span className="font-semibold text-[#302018]">
+              Tổng thanh toán
+            </span>
             <span className="text-xl font-bold text-[#3b281f]">
               {formatCurrency(total)}
             </span>
@@ -535,7 +604,9 @@ export default function CartPage() {
             disabled={selectedIds.length === 0}
             onClick={handleProceedToCheckout}
           >
-            {!user ? "Đăng nhập để thanh toán" : `Thanh toán ${selectedIds.length > 0 ? `${selectedIds.length} món` : ""}`}
+            {!user
+              ? "Đăng nhập để thanh toán"
+              : `Thanh toán ${selectedIds.length > 0 ? `${selectedIds.length} món` : ""}`}
           </Button>
 
           <p className="mt-3 text-center text-xs leading-5 text-[#958278]">
@@ -553,7 +624,10 @@ export default function CartPage() {
           aria-labelledby="remove-title"
         >
           <div className="w-full max-w-sm rounded-[2rem] bg-white p-6 shadow-2xl">
-            <h2 id="remove-title" className="font-serif text-2xl text-[#302018]">
+            <h2
+              id="remove-title"
+              className="font-serif text-2xl text-[#302018]"
+            >
               Xóa món khỏi giỏ?
             </h2>
             <p className="mt-2 text-sm leading-6 text-[#7a685e]">
@@ -576,9 +650,24 @@ export default function CartPage() {
         <div
           className="fixed right-4 top-20 z-50 flex max-w-sm items-start gap-2.5 rounded-2xl border p-3.5 text-left text-xs font-medium leading-5 shadow-xl backdrop-blur transition-all"
           style={{
-            borderColor: toast.type === "error" ? "#efc3bd" : toast.type === "info" ? "#ddd2c8" : "#b9d0b9",
-            backgroundColor: toast.type === "error" ? "rgba(255, 242, 240, 0.95)" : toast.type === "info" ? "rgba(255, 255, 255, 0.95)" : "rgba(237, 245, 236, 0.95)",
-            color: toast.type === "error" ? "#8c382e" : toast.type === "info" ? "#49372e" : "#31583b",
+            borderColor:
+              toast.type === "error"
+                ? "#efc3bd"
+                : toast.type === "info"
+                  ? "#ddd2c8"
+                  : "#b9d0b9",
+            backgroundColor:
+              toast.type === "error"
+                ? "rgba(255, 242, 240, 0.95)"
+                : toast.type === "info"
+                  ? "rgba(255, 255, 255, 0.95)"
+                  : "rgba(237, 245, 236, 0.95)",
+            color:
+              toast.type === "error"
+                ? "#8c382e"
+                : toast.type === "info"
+                  ? "#49372e"
+                  : "#31583b",
           }}
           role="status"
         >
