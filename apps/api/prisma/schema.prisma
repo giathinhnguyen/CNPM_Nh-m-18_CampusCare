@@ -116,6 +116,7 @@ model User {
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   cartItems           CartItem[]
+  cartSyncs           CartSync[]
   orders              Order[]
   loyaltyTransactions LoyaltyTransaction[]
   rewardRedemptions   RewardRedemption[]
@@ -156,6 +157,7 @@ model Product {
   sizes      ProductSize[]
   cartItems  CartItem[]
   orderItems OrderItem[]
+  promotions PromotionProduct[]
 
   @@index([categoryId])
   @@index([isActive])
@@ -233,9 +235,26 @@ model CartItemTopping {
   @@map("cart_item_toppings")
 }
 
+// Ghi nhận một lần gộp giỏ khách để retry không cộng món hai lần.
+model CartSync {
+  userId      String   @map("user_id") @db.Uuid
+  syncId      String   @map("sync_id") @db.Uuid
+  payloadHash String   @map("payload_hash") @db.VarChar(64)
+  warnings    Json
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, syncId])
+  @@map("cart_syncs")
+}
+
 model Promotion {
   id                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   code              String       @unique @db.VarChar(50)
+  title             String?      @db.VarChar(100)
+  description       String?      @db.Text
+  displayOrder      Int          @default(0) @map("display_order")
+  appliesToAllProducts Boolean   @default(true) @map("applies_to_all_products")
   discountType      DiscountType @map("discount_type")
   discountValue     Decimal      @map("discount_value") @db.Decimal(12, 0)
   maxDiscountAmount Decimal?     @map("max_discount_amount") @db.Decimal(12, 0)
@@ -247,9 +266,22 @@ model Promotion {
   updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   orders Order[]
+  products PromotionProduct[]
 
   @@index([isActive, startDate, endDate])
   @@map("promotions")
+}
+
+model PromotionProduct {
+  promotionId String @map("promotion_id") @db.Uuid
+  productId   String @map("product_id") @db.Uuid
+
+  promotion Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@id([promotionId, productId])
+  @@index([productId])
+  @@map("promotion_products")
 }
 
 model Order {

@@ -17,7 +17,7 @@ import { cx } from "../lib/utils";
 
 const navItems = [
   { label: "Trang chủ", to: "/", enabled: true },
-  { label: "Khuyến mãi", to: "/promotions", enabled: false },
+  { label: "Khuyến mãi", to: "/promotions", enabled: true },
   { label: "Đơn hàng", to: "/orders", enabled: false },
 ];
 
@@ -333,7 +333,7 @@ export default function Layout() {
               <Link to="/" className="transition hover:text-white">
                 Menu hôm nay
               </Link>
-              <span className="cursor-not-allowed text-[#8d7b70]" title="Chức năng đang được phát triển">Khuyến mãi</span>
+              <Link to="/promotions" className="transition hover:text-white">Khuyến mãi</Link>
               <span className="cursor-not-allowed text-[#8d7b70]" title="Chức năng đang được phát triển">Đơn hàng của tôi</span>
               <Link to="/cart" className="transition hover:text-white">
                 Giỏ hàng

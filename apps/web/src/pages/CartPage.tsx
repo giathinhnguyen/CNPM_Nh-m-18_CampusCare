@@ -14,13 +14,15 @@ import {
   Button,
   ButtonLink,
   EmptyState,
+  ErrorState,
   InlineNotice,
   LoadingState,
   PageTitle,
   TextArea,
   TextInput,
 } from "../components/ui";
-import { getPromotion, getPromotionDiscount } from "../data/promotions";
+import { useCartPromotion } from "../hooks/useCartPromotion";
+import { cartIntegrationService } from "../services/cartIntegrationService";
 import { formatCurrency } from "../lib/utils";
 import { cartService } from "../services/cartService";
 import { useAuth } from "../contexts/AuthContext";
@@ -64,7 +66,7 @@ const formatLevel = (level: any) => {
 };
 
 export default function CartPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   const [cartItems, setCartItems] = useState<any[]>([]);
@@ -73,8 +75,10 @@ export default function CartPage() {
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [code, setCode] = useState("");
-  const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
-  const [promoError, setPromoError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [savingSelection, setSavingSelection] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const loadVersion = useRef(0);
   const [pendingRemoval, setPendingRemoval] = useState<string | null>(null);
 
   // Toast thông báo
@@ -97,32 +101,37 @@ export default function CartPage() {
 
   // 1. Tải giỏ hàng
   const fetchCart = async (keepSelection = true) => {
+    const version = ++loadVersion.current;
     try {
       setLoading(true);
+      setLoadError("");
       const data = await cartService.getCart(Boolean(user));
+      if (version !== loadVersion.current) return;
       const items = data.items || [];
       setCartItems(items);
 
       setSelectedIds((prev) => {
-        if (keepSelection && prev.length > 0) {
+        if (keepSelection) {
           const currentValid = items
             .filter((item: any) => !item.isOutOfStock && !item.unavailable)
             .map((item: any) => item.id);
           const preserved = prev.filter((id) => currentValid.includes(id));
-          return preserved.length > 0 ? preserved : currentValid;
+          return preserved;
         }
         return items
-          .filter((item: any) => !item.isOutOfStock && !item.unavailable)
+          .filter((item: any) => !item.isOutOfStock && !item.unavailable && item.isSelected !== false)
           .map((item: any) => item.id);
       });
     } catch (err) {
       console.error("Lỗi lấy giỏ hàng:", err);
+      if (version === loadVersion.current) setLoadError(err instanceof Error ? err.message : "Không thể tải giỏ hàng");
     } finally {
-      setLoading(false);
+      if (version === loadVersion.current) setLoading(false);
     }
   };
 
   useEffect(() => {
+    if (authLoading) return;
     void fetchCart(false).then(() => {
       // Đọc cảnh báo từ sync giỏ hàng (khi vừa đăng nhập)
       const rawWarnings = sessionStorage.getItem("brewlite_sync_warnings");
@@ -141,7 +150,8 @@ export default function CartPage() {
         }
       }
     });
-  }, [user]);
+    return () => { loadVersion.current++; };
+  }, [user, authLoading]);
 
   // Kiểm tra món hết hàng
   const isUnavailable = (item: any) =>
@@ -156,29 +166,47 @@ export default function CartPage() {
     availableItems.length > 0 && selectedIds.length === availableItems.length;
 
   const selectedItems = cartItems.filter((item) =>
-    selectedIds.includes(item.id),
+    selectedIds.includes(item.id) && !isUnavailable(item),
   );
-  const subtotal = selectedItems.reduce(
+  const localSubtotal = selectedItems.reduce(
     (sum, item) => sum + (item.unitPrice || item.price || 0) * item.quantity,
     0,
   );
-  const activeDiscount = appliedPromo
-    ? getPromotionDiscount(appliedPromo, subtotal)
-    : 0;
-  const total = Math.max(0, subtotal - activeDiscount);
+  const promotion = useCartPromotion(loading || authLoading || loadError ? [] : selectedItems, user?.id ?? "guest");
+  const { appliedPromo, error: promoError } = promotion;
+  const subtotal = promotion.quote?.totalAmount ?? localSubtotal;
+  const activeDiscount = promotion.quote?.discountAmount ?? 0;
+  const total = promotion.quote?.finalAmount ?? subtotal;
+  const busy = savingSelection || updatingId !== null || confirming;
+
+  const persistSelection = async (nextIds: string[]) => {
+    if (busy) return;
+    const version = loadVersion.current;
+    setSavingSelection(true);
+    try {
+      await cartIntegrationService.saveSelection(cartItems, nextIds, Boolean(user));
+      if (version !== loadVersion.current) return;
+      setSelectedIds(nextIds);
+      setCartItems((items) => items.map((item) => ({ ...item, isSelected: nextIds.includes(item.id) })));
+    } catch (err) {
+      if (version !== loadVersion.current) return;
+      showToast(err instanceof Error ? err.message : "Không thể lưu lựa chọn", "error");
+      await fetchCart(false);
+    } finally {
+      setSavingSelection(false);
+    }
+  };
 
   // Chọn / bỏ chọn 1 món
   const toggleItem = (id: string) => {
-    setSelectedIds((current) =>
-      current.includes(id)
-        ? current.filter((key) => key !== id)
-        : [...current, id],
-    );
+    void persistSelection(selectedIds.includes(id)
+      ? selectedIds.filter((key) => key !== id)
+      : [...selectedIds, id]);
   };
 
   // Chọn tất cả món còn hàng
   const toggleSelectAll = () => {
-    setSelectedIds(allSelected ? [] : availableItems.map((item) => item.id));
+    void persistSelection(allSelected ? [] : availableItems.map((item) => item.id));
   };
 
   // 2. Cập nhật số lượng & Chặn khi vượt quá số lượng mua
@@ -261,51 +289,43 @@ export default function CartPage() {
 
   // 5. Áp dụng mã ưu đãi
   const submitPromo = () => {
-    const normalized = code.trim().toUpperCase();
-    if (!normalized) {
-      setPromoError("Vui lòng nhập mã ưu đãi.");
-      return;
-    }
-    const promotion = getPromotion(normalized);
-    if (!promotion) {
-      setPromoError("Mã không hợp lệ hoặc không còn được áp dụng.");
-      return;
-    }
-    if (subtotal < promotion.minSpend) {
-      setPromoError(
-        `Đơn hàng chưa đạt mức tối thiểu ${formatCurrency(promotion.minSpend)}.`,
-      );
-      return;
-    }
-    setAppliedPromo(normalized);
-    setPromoError("");
-    showToast(`Mã ${normalized} đã được áp dụng`);
+    promotion.apply(code);
   };
 
   // 6. Xử lý nút thanh toán
-  const handleProceedToCheckout = () => {
-    if (!user) {
-      showToast("Vui lòng đăng nhập để tiến hành đặt hàng nhé!", "info");
-      navigate("/login");
-      return;
+  const handleProceedToCheckout = async () => {
+    if (busy || !promotion.canProceed) return;
+    const version = loadVersion.current;
+    setConfirming(true);
+    try {
+      await promotion.confirm();
+      if (version !== loadVersion.current) return;
+      localStorage.setItem("brewlite_checkout_selection", JSON.stringify(selectedIds));
+      if (!user) {
+        navigate("/login", { state: { from: "/cart" } });
+        return;
+      }
+      showToast("Đã lưu lựa chọn và mã ưu đãi. Chức năng đặt hàng hiện chưa khả dụng.", "info");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Không thể xác nhận giá", "error");
+    } finally {
+      setConfirming(false);
     }
-
-    localStorage.setItem(
-      "brewlite_checkout_selection",
-      JSON.stringify(selectedIds),
-    );
-    if (appliedPromo) {
-      localStorage.setItem("brewlite_applied_promo", appliedPromo);
-    }
-    navigate("/checkout");
   };
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
         <LoadingState label="Đang kiểm tra giỏ hàng của bạn..." />
       </section>
     );
+  }
+
+  if (loadError) {
+    return <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
+      <ErrorState title="Chưa tải được giỏ hàng" description={loadError}
+        action={<Button onClick={() => void fetchCart(false)}>Thử lại</Button>} />
+    </section>;
   }
 
   if (cartItems.length === 0) {
@@ -346,6 +366,7 @@ export default function CartPage() {
           <button
             type="button"
             onClick={toggleSelectAll}
+            disabled={busy}
             className="flex items-center gap-3 rounded-xl px-1 py-2 text-sm font-semibold text-[#5f4b40] transition hover:text-[#3b241c]"
           >
             <span
@@ -363,7 +384,8 @@ export default function CartPage() {
           {cartItems.map((item) => {
             const unavailable = isUnavailable(item);
             const isSelected = selectedIds.includes(item.id);
-            const itemPrice = item.unitPrice || item.price || 0;
+            const quoteIndex = selectedItems.findIndex((selected) => selected.id === item.id);
+            const itemPrice = promotion.quote?.items[quoteIndex]?.unitPrice ?? item.unitPrice ?? item.price ?? 0;
             const itemImg =
               item.imageUrl ||
               item.image ||
@@ -380,7 +402,7 @@ export default function CartPage() {
                 <button
                   type="button"
                   onClick={() => toggleItem(item.id)}
-                  disabled={unavailable}
+                  disabled={unavailable || busy}
                   className="absolute left-3 top-1/2 grid size-6 -translate-y-1/2 place-items-center rounded-md focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#b9845a]/25 disabled:cursor-not-allowed disabled:opacity-40 sm:left-4"
                   aria-label={
                     isSelected ? `Bỏ chọn ${itemName}` : `Chọn ${itemName}`
@@ -492,7 +514,7 @@ export default function CartPage() {
                           disabled={
                             item.quantity === 1 ||
                             unavailable ||
-                            updatingId === item.id
+                            busy
                           }
                           aria-label={`Giảm số lượng ${itemName}`}
                         >
@@ -510,7 +532,7 @@ export default function CartPage() {
                           disabled={
                             item.isReward ||
                             unavailable ||
-                            updatingId === item.id
+                            busy
                           }
                           aria-label={`Tăng số lượng ${itemName}`}
                         >
@@ -531,6 +553,7 @@ export default function CartPage() {
                       type="button"
                       className="grid size-9 place-items-center rounded-full text-[#9b4a40] hover:bg-[#fff0ed]"
                       onClick={() => setPendingRemoval(item.id)}
+                      disabled={busy}
                       aria-label={`Xóa ${itemName}`}
                     >
                       <Trash2 size={16} />
@@ -556,7 +579,7 @@ export default function CartPage() {
               aria-label="Mã ưu đãi"
               icon={<Tag size={17} />}
             />
-            <Button variant="secondary" onClick={submitPromo}>
+            <Button variant="secondary" onClick={submitPromo} disabled={busy || promotion.pending}>
               Áp dụng
             </Button>
           </div>
@@ -567,7 +590,13 @@ export default function CartPage() {
             </div>
           )}
 
-          {appliedPromo && !promoError && (
+          {promotion.pending && <p className="mt-3 text-sm text-[#7c6a60]">Đang kiểm tra giá và ưu đãi...</p>}
+
+          {promoError && <Button variant="ghost" onClick={promotion.retry} disabled={busy}>Kiểm tra lại</Button>}
+
+          {appliedPromo && <Button variant="ghost" onClick={promotion.remove} disabled={busy}>Bỏ mã {appliedPromo}</Button>}
+
+          {promotion.quote?.promotionCode && !promoError && (
             <div className="mt-3">
               <InlineNotice>Đã áp dụng mã {appliedPromo}</InlineNotice>
             </div>
@@ -601,7 +630,7 @@ export default function CartPage() {
             fullWidth
             size="lg"
             className="mt-6"
-            disabled={selectedIds.length === 0}
+            disabled={!promotion.canProceed || busy}
             onClick={handleProceedToCheckout}
           >
             {!user
