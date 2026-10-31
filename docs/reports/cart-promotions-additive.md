@@ -2,6 +2,14 @@
 
 Triển khai sau khi người dùng duyệt phần giải thích: "ok mình đã hiểu ý bạn, giờ hãy bắt đầu làm đi nhe". Giữ công nghệ hiện tại; không viết lại các file nghiệp vụ giỏ hàng của nhóm.
 
+## Gỡ hai lớp đồng bộ bổ sung theo yêu cầu ngày 31/10/2026
+
+Đã xóa `apps/api/src/carts/cart-sync.controller.ts`, `apps/api/src/carts/cart-sync.service.ts`, tháo đăng ký trong `CartsModule`. Frontend `cartService.ts` được trả về nội dung trước phần tích hợp (commit `549f8ee`), tiếp tục gọi `/api/cart/sync` gốc. Điều chỉnh test tích hợp để dùng `CartsService.syncCart()` gốc và kiểm tra mã theo giỏ, bỏ các kiểm thử riêng của lớp đã gỡ. Trang/API khuyến mãi và việc tính giảm theo database được giữ nguyên.
+
+Không sửa lịch sử commit đã push; thay đổi được ghi bằng commit mới. Không xóa bảng `CartSync`, migration, DTO hoặc helper chưa được yêu cầu gỡ; các phần phụ trợ đồng bộ này không còn được gọi bởi luồng frontend/backend hiện tại. Các mục bên dưới là lịch sử triển khai trước lần gỡ.
+
+Kiểm tra sau khi gỡ: backend/frontend build thành công, TypeScript toàn API qua; 20 test khuyến mãi, 16 test frontend và hai bài kiểm thử PostgreSQL đều qua.
+
 ## Cập nhật vị trí file ngày 31/10/2026
 
 Theo yêu cầu sắp xếp lại trách nhiệm chức năng, đã chuyển nguyên controller/service đồng bộ sang `apps/api/src/carts/` và DTO sang `apps/api/src/carts/dto/cart-sync.dto.ts`. Chuyển đăng ký sang `CartsModule`, sửa import trong service, DTO và test. Không thay thuật toán gộp, cơ chế biên nhận, URL `/api/cart/sync-once` hay cấu trúc request/response; không thay schema hoặc migration. Các mục phía dưới ghi lại lần triển khai ban đầu, khi file còn ở `promotions`.

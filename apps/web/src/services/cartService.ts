@@ -1,32 +1,48 @@
 import { authenticatedFetch } from './session.js';
-import { syncGuestCart } from './guestCartSync';
-import { getCartOwner } from './cartIntegrationService';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 const LOCAL_STORAGE_KEY = 'brewlite_guest_cart';
+let isSyncing = false;
 
 export const cartService = {
     // 1. LẤY GIỎ HÀNG & TỰ ĐỘNG ĐỒNG BỘ KHÔNG BỊ DƯ
     getCart: async (isLoggedIn: boolean) => {
         if (isLoggedIn) {
-            const owner = getCartOwner();
-            if (!owner) throw new Error('Vui lòng đăng nhập lại');
-            const syncData = await syncGuestCart(owner, (body) =>
-                authenticatedFetch(`${API_BASE}/cart/sync-once`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body),
-                }), getCartOwner) as { warnings?: string[] } | undefined;
-            if (syncData?.warnings?.length) {
-                sessionStorage.setItem('brewlite_sync_warnings', JSON.stringify(syncData.warnings));
+            // Kiểm tra nếu có món từ lúc chưa đăng nhập thì đẩy lên DB
+            const localData = localStorage.getItem(LOCAL_STORAGE_KEY);
+            if (localData && !isSyncing) {
+                isSyncing = true;
+                localStorage.removeItem(LOCAL_STORAGE_KEY);
+                try {
+                    const localItems = JSON.parse(localData);
+                    if (Array.isArray(localItems) && localItems.length > 0) {
+                        const syncRes = await authenticatedFetch(`${API_BASE}/cart/sync`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ items: localItems }),
+                        });
+                        if (syncRes.ok) {
+                            const syncData = await syncRes.json();
+                            // Lưu cảnh báo vượt tồn kho vào sessionStorage để CartPage đọc và hiển thị
+                            if (Array.isArray(syncData.warnings) && syncData.warnings.length > 0) {
+                                sessionStorage.setItem('brewlite_sync_warnings', JSON.stringify(syncData.warnings));
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error("Lỗi đồng bộ giỏ hàng:", err);
+                } finally {
+                    isSyncing = false;
+                }
             }
 
             // Lấy toàn bộ giỏ hàng chuẩn từ PostgreSQL về
-            const res = await authenticatedFetch(`${API_BASE}/cart`);
-            if (!res.ok) throw new Error('Không thể tải giỏ hàng. Vui lòng thử lại');
-            const cart = await res.json();
-            if (getCartOwner() !== owner) throw new Error('Tài khoản đã thay đổi. Vui lòng tải lại giỏ');
-            return cart;
+            try {
+                const res = await authenticatedFetch(`${API_BASE}/cart`);
+                if (res.ok) return await res.json();
+            } catch (err) {
+                console.warn("Lỗi lấy giỏ từ server");
+            }
         }
 
         // Nếu là khách vãng lai: Lấy từ LocalStorage

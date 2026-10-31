@@ -63,19 +63,13 @@ Khi đổi lựa chọn/số lượng, xóa món hoặc đổi mã, kết quả 
 
 Mã hợp lệ được giữ qua luồng đăng nhập và được kiểm tra lại sau khi gộp giỏ. `cartIntegrationService.ts` lưu chọn/bỏ chọn bằng API có sẵn `PATCH /api/cart/items/:id` với `{ "isSelected": true/false }`. Giỏ khách lưu cờ tương tự ở localStorage. Danh sách rỗng nghĩa là không chọn món nào. Các PATCH không nguyên tử cho toàn giỏ; nếu có lỗi một phần, trang tải lại trạng thái thực tế và báo lỗi.
 
-`useCartPromotion.ts` tách việc gọi API, quản lý mã/lỗi và bỏ qua phản hồi cũ khỏi trang giỏ. Tổng tiền và giá của các dòng được chọn lấy từ báo giá khớp giỏ hiện tại. Không thay cách tải giỏ khách từ danh mục hoặc viết lại các hàm thêm/sửa/xóa của giỏ. Kiểm tra quan hệ sản phẩm–size và trạng thái bán nằm trong lớp sync bổ sung và API báo giá; endpoint thêm món gốc được giữ nguyên.
+`useCartPromotion.ts` tách việc gọi API, quản lý mã/lỗi và bỏ qua phản hồi cũ khỏi trang giỏ. Tổng tiền và giá của các dòng được chọn lấy từ báo giá khớp giỏ hiện tại. Không thay cách tải giỏ khách từ danh mục hoặc viết lại các hàm thêm/sửa/xóa của giỏ. API báo giá kiểm tra size/topping đang bán; endpoint thêm món gốc được giữ nguyên.
 
 ### Đồng bộ giỏ khách
 
-Endpoint bổ sung `POST /api/cart/sync-once` nhận `{ "syncId": "UUID-của-lô", "items": [...] }`, yêu cầu đăng nhập. Controller và service đồng bộ nằm trong `apps/api/src/carts/`, DTO ở `apps/api/src/carts/dto/`, được đăng ký trong `CartsModule`. `PromotionsModule` chỉ đăng ký API khuyến mãi. Endpoint gốc `POST /api/cart/sync` và các file controller, service, DTO giỏ hàng gốc giữ nguyên; chỉ bổ sung đăng ký lớp đồng bộ trong module giỏ hàng.
+Đã gỡ hai file `cart-sync.controller.ts`, `cart-sync.service.ts` và endpoint bổ sung `/api/cart/sync-once` theo yêu cầu. `cartService.getCart()` trở lại cách đồng bộ gốc của nhóm, gửi `{ "items": [...] }` tới `POST /api/cart/sync`. `CartsService.syncCart()` gốc xử lý gộp món, cộng số lượng, giới hạn tồn kho và cảnh báo. Đồng bộ diễn ra khi tải giỏ tài khoản đã đăng nhập.
 
-`guestCartSync.ts` giữ nguyên snapshot cùng `syncId` trong localStorage cho đến khi server xác nhận. Đồng bộ diễn ra khi trang lấy giỏ của khách đã đăng nhập, không phụ thuộc việc đã bấm thanh toán hay chưa. Lỗi mạng/server không xóa giỏ khách. Các lần tải giỏ đồng thời trong cùng tab dùng chung một request.
-
-`CartSyncService` khóa các lần đồng bộ mới theo tài khoản, đọc biên nhận rồi gọi lại nguyên `CartsService.syncCart()` với Prisma client của transaction. Hàm gốc vẫn xử lý tìm món trùng, cộng số lượng và giới hạn tồn kho. Service bổ sung lưu biên nhận `CartSync` cùng các món trong transaction đó. Gửi lại cùng `syncId` và payload trả giỏ hiện tại, không gọi gộp lại; gửi payload khác với ID đã dùng bị từ chối. Biên nhận này chỉ chống gộp trùng giỏ, không giới hạn việc dùng lại mã khuyến mãi.
-
-Khóa trên chỉ phối hợp các lần gọi endpoint mới, không tự khóa các endpoint thêm/sửa/xóa và sync gốc. Việc gộp tùy chọn, ghi chú và trạng thái mặc định của món mới vẫn theo hàm gốc; không bổ sung quy tắc gộp khác.
-
-Nếu món đã ngừng bán hoặc số lượng phải giảm do tồn kho, response có `warnings` để thông báo. Những món thêm từ tab khác sau khi gửi snapshot được giữ lại ở giỏ khách. Một lô đang chờ xác nhận được gắn với tài khoản nhận, tránh tự chuyển lô sang tài khoản khác sau khi đăng xuất.
+Frontend không còn gọi helper `guestCartSync.ts`; luồng hiện tại không có cơ chế biên nhận `syncId` chống gửi lại. Helper, DTO phụ trợ và bảng `CartSync` vẫn được giữ trong repo/database nhưng không được dùng trong luồng chạy này. Không xóa migration đã áp dụng hoặc dữ liệu database khi gỡ hai file. Phần kiểm tra mã và tính giảm giá vẫn dùng API khuyến mãi như trên.
 
 ### Phần cần nối khi có chức năng đặt hàng
 
