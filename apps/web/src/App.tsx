@@ -8,6 +8,7 @@ import AccountPage from "./pages/AccountPage";
 import CartPage from "./pages/CartPage";
 
 import RegisterPage from "./pages/RegisterPage";
+import PromotionsPage from "./pages/PromotionsPage";
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
           <Route element={<ProtectedRoute />}>
             <Route path="/account" element={<AccountPage />} />
           </Route>
+          <Route path="/promotions" element={<PromotionsPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
