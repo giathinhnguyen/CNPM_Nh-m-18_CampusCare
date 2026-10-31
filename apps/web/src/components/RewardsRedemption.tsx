@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   AlertCircle,
   Check,
@@ -7,9 +8,10 @@ import {
   LockKeyhole,
   RefreshCw,
 } from "lucide-react";
-import { rewardService } from "../services/rewardService";
-import { Button, InlineNotice } from "./ui";
+import { rewardService, type RewardBalance } from "../services/rewardService";
+import { Button, ButtonLink, InlineNotice } from "./ui";
 import { cx } from "../lib/utils";
+import { useAuth } from "../contexts/AuthContext";
 
 interface RewardProduct {
   id: string;
@@ -30,37 +32,40 @@ interface RewardProduct {
 type LoadState = "loading" | "success" | "error";
 
 export default function RewardsRedemption() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [balance, setBalance] = useState<RewardBalance | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState("");
+  const requestKey = useRef<{ productId: string; key: string } | null>(null);
+  const submittingRef = useRef(false);
   const [products, setProducts] = useState<RewardProduct[]>([]);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
-
-  const loadRewards = async () => {
-    setLoadState("loading");
-    setMessage("");
-
-    try {
-      const data = await rewardService.getRewardProducts();
-      setProducts(data);
-      setLoadState("success");
-    } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Không thể tải danh sách đổi thưởng.",
-      );
-      setLoadState("error");
-    }
-  };
+  const [reload, setReload] = useState(0);
+  const owner = useRef(user?.id);
+  owner.current = user?.id;
+  const loadRewards = () => setReload((value) => value + 1);
 
   useEffect(() => {
     const controller = new AbortController();
 
-    rewardService
-      .getRewardProducts(controller.signal)
-      .then((data) => {
+    setBalance(null);
+    setSelectedId(null);
+    setSuccess("");
+    setMessage("");
+    setLoadState("loading");
+    Promise.all([
+      rewardService.getRewardProducts(controller.signal),
+      user
+        ? rewardService.getBalance(controller.signal)
+        : Promise.resolve(null),
+    ])
+      .then(([data, points]) => {
         if (controller.signal.aborted) return;
         setProducts(data);
+        setBalance(points);
         setLoadState("success");
       })
       .catch((error: unknown) => {
@@ -75,7 +80,74 @@ export default function RewardsRedemption() {
       });
 
     return () => controller.abort();
-  }, []);
+  }, [user?.id, reload]);
+
+  useEffect(() => {
+    if (!user) return;
+    const controller = new AbortController();
+    const refresh = () => {
+      void rewardService
+        .getBalance(controller.signal)
+        .then((data) => {
+          if (!controller.signal.aborted) setBalance(data);
+        })
+        .catch(() => {});
+    };
+    window.addEventListener("focus", refresh);
+    return () => {
+      controller.abort();
+      window.removeEventListener("focus", refresh);
+    };
+  }, [user?.id]);
+
+  const redeem = async () => {
+    if (
+      !selectedId ||
+      !balance ||
+      balance.hasRewardInCart ||
+      submittingRef.current
+    )
+      return;
+    submittingRef.current = true;
+    const requestedOwner = user?.id;
+    setSubmitting(true);
+    setMessage("");
+    setSuccess("");
+    if (requestKey.current?.productId !== selectedId)
+      requestKey.current = { productId: selectedId, key: crypto.randomUUID() };
+    try {
+      const result = await rewardService.redeem(
+        selectedId,
+        requestKey.current.key,
+      );
+      if (owner.current !== requestedOwner) return;
+      requestKey.current = null;
+      setSelectedId(null);
+      if (result.cartItem) {
+        navigate("/cart");
+        return;
+      }
+      setSuccess(
+        "Lượt đổi này đã được xử lý. Vui lòng kiểm tra lại giỏ hàng.",
+      );
+      const latest = await rewardService.getBalance();
+      if (owner.current === requestedOwner) setBalance(latest);
+    } catch (error) {
+      if (owner.current !== requestedOwner) return;
+      setMessage(
+        error instanceof Error ? error.message : "Không thể đổi thưởng",
+      );
+      try {
+        const latest = await rewardService.getBalance();
+        if (owner.current === requestedOwner) setBalance(latest);
+      } catch {
+        /* Allow a retry with the same request key. */
+      }
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  };
 
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === selectedId) ?? null,
@@ -93,10 +165,50 @@ export default function RewardsRedemption() {
             Đổi điểm lấy đồ uống
           </h3>
           <p className="mt-2 max-w-xl text-sm leading-6 text-[#58705b]">
-            Chọn một món đủ điều kiện. Điểm chỉ được trừ sau khi thanh toán
-            thành công.
+            Điểm được giữ khi thêm món vào giỏ và được giải phóng khi bạn xóa
+            món.
           </p>
         </div>
+        {balance && (
+          <div className="shrink-0 rounded-2xl bg-[#fbf8f3] px-5 py-3 text-right shadow-sm">
+            <p className="text-xs text-[#58705b]">Điểm khả dụng</p>
+            <p className="font-serif text-2xl text-[#36503a]">
+              {balance.availablePoints.toLocaleString("vi-VN")} điểm
+            </p>
+            <p className="mt-1 text-xs text-[#58705b]">
+              Tổng {balance.pointsBalance} · Đang giữ {balance.reservedPoints}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {!user && (
+        <div className="mt-5">
+          <ButtonLink to="/login" variant="secondary">
+            Đăng nhập để đổi điểm
+          </ButtonLink>
+        </div>
+      )}
+      {balance?.hasRewardInCart && (
+        <div className="mt-5">
+          <InlineNotice type="info">
+            Giỏ hàng đã có sản phẩm đổi thưởng. Hãy xóa món đó trước khi đổi sản
+            phẩm khác.
+          </InlineNotice>
+        </div>
+      )}
+      <div className="mt-4" role="status" aria-live="polite">
+        {success && (
+          <>
+            <InlineNotice type="success">{success}</InlineNotice>
+            <ButtonLink to="/cart" className="mt-3">
+              Xem giỏ hàng
+            </ButtonLink>
+          </>
+        )}
+        {message && loadState === "success" && (
+          <InlineNotice type="error">{message}</InlineNotice>
+        )}
       </div>
 
       {loadState === "loading" && (
@@ -143,7 +255,15 @@ export default function RewardsRedemption() {
           <div className="mt-6 flex snap-x gap-4 overflow-x-auto pb-4 [scrollbar-color:#9db19a_transparent] [scrollbar-width:thin]">
             {products.map((reward) => {
               const product = reward.productSize.product;
-              const available = reward.isActive && product.stockQuantity > 0;
+              const available = Boolean(
+                user &&
+                balance &&
+                !balance.hasRewardInCart &&
+                balance.availablePoints >= reward.pointsRequired &&
+                reward.isActive &&
+                product.stockQuantity > 0 &&
+                !submitting,
+              );
               const selected = selectedId === reward.id;
 
               return (
@@ -151,6 +271,7 @@ export default function RewardsRedemption() {
                   key={reward.id}
                   type="button"
                   disabled={!available}
+                  aria-pressed={selected}
                   onClick={() =>
                     setSelectedId((current) =>
                       current === reward.id ? null : reward.id,
@@ -187,7 +308,16 @@ export default function RewardsRedemption() {
                         {reward.pointsRequired.toLocaleString("vi-VN")} điểm
                       </span>
                       <span className="text-[0.65rem] font-bold uppercase tracking-wide text-[#55735a]">
-                        {available ? "Có thể chọn" : "Không khả dụng"}
+                        {product.stockQuantity <= 0
+                          ? "Hết hàng"
+                          : !user
+                            ? "Cần đăng nhập"
+                            : balance?.hasRewardInCart
+                              ? "Đã có trong giỏ"
+                              : (balance?.availablePoints ?? 0) <
+                                  reward.pointsRequired
+                                ? "Chưa đủ điểm"
+                                : "Đủ điểm"}
                       </span>
                     </div>
                   </div>
@@ -208,15 +338,23 @@ export default function RewardsRedemption() {
             })}
           </div>
 
-          <div className="mt-2">
-            <InlineNotice type="info">
-              Chức năng đổi điểm sẽ được kích hoạt sau khi kết nối tài khoản và
-              giỏ hàng với backend.
-            </InlineNotice>
-          </div>
-
-          <Button className="mt-4" disabled={!selectedProduct || true}>
-            <Gift size={17} /> Đổi điểm
+          <Button
+            className="mt-4"
+            onClick={() => void redeem()}
+            disabled={
+              !selectedProduct ||
+              !balance ||
+              balance.hasRewardInCart ||
+              submitting ||
+              balance.availablePoints < selectedProduct.pointsRequired
+            }
+          >
+            {submitting ? (
+              <LoaderCircle size={17} className="animate-spin" />
+            ) : (
+              <Gift size={17} />
+            )}{" "}
+            {submitting ? "Đang xử lý..." : "Đổi điểm"}
           </Button>
         </>
       )}

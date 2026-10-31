@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
 import HomePage from "./pages/HomePage";
 import ProductPage from "./pages/ProductPage";
@@ -9,6 +9,7 @@ import CartPage from "./pages/CartPage";
 
 import RegisterPage from "./pages/RegisterPage";
 import PromotionsPage from "./pages/PromotionsPage";
+import RewardsPage from "./pages/RewardsPage";
 
 function App() {
   return (
@@ -24,6 +25,11 @@ function App() {
             <Route path="/account" element={<AccountPage />} />
           </Route>
           <Route path="/promotions" element={<PromotionsPage />} />
+          <Route path="/rewards" element={<RewardsPage />} />
+          <Route
+            path="/orders/*"
+            element={<Navigate to="/rewards" replace />}
+          />
         </Route>
       </Routes>
     </BrowserRouter>

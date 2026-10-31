@@ -51,6 +51,7 @@ services:
       - web_node_modules:/workspace/apps/web/node_modules
     environment:
       NODE_ENV: development
+      REWARDS_TEST_PAYMENTS: ${REWARDS_TEST_PAYMENTS:-false}
       PORT: 3000
       WEB_ORIGIN: http://localhost:5173
       JWT_SECRET: ${JWT_SECRET}
