@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { DrinkLevel } from '@prisma/client';
 import { createHash } from 'node:crypto';
-import { CartsService } from '../carts/carts.service.js';
-import type { AddToCartDto } from '../carts/carts.dto.js';
+import { CartsService } from './carts.service.js';
+import type { AddToCartDto } from './carts.dto.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { CartSyncDto } from './dto/cart-sync.dto.js';
 

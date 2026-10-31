@@ -2,6 +2,14 @@
 
 Triển khai sau khi người dùng duyệt phần giải thích: "ok mình đã hiểu ý bạn, giờ hãy bắt đầu làm đi nhe". Giữ công nghệ hiện tại; không viết lại các file nghiệp vụ giỏ hàng của nhóm.
 
+## Cập nhật vị trí file ngày 31/10/2026
+
+Theo yêu cầu sắp xếp lại trách nhiệm chức năng, đã chuyển nguyên controller/service đồng bộ sang `apps/api/src/carts/` và DTO sang `apps/api/src/carts/dto/cart-sync.dto.ts`. Chuyển đăng ký sang `CartsModule`, sửa import trong service, DTO và test. Không thay thuật toán gộp, cơ chế biên nhận, URL `/api/cart/sync-once` hay cấu trúc request/response; không thay schema hoặc migration. Các mục phía dưới ghi lại lần triển khai ban đầu, khi file còn ở `promotions`.
+
+Backend giỏ hàng chịu trách nhiệm gộp/chống đồng bộ trùng; backend khuyến mãi chịu trách nhiệm danh sách mã và báo giá. Frontend `useCartPromotion.ts`, `promotionService.ts` và các service giỏ hàng giữ vị trí hiện tại trong `hooks/`, `services/`; không di chuyển thêm vì đã được tách theo chức năng. `CartsController`, `CartsService`, `carts.dto.ts` gốc không đổi; `carts.module.ts` được bổ sung đăng ký hai lớp đồng bộ.
+
+Kiểm tra riêng cho lần di chuyển: backend build và kiểm tra TypeScript toàn API thành công; 20 test khuyến mãi và cả hai bài kiểm thử PostgreSQL đều qua.
+
 ## Các file của nhóm được giữ nguyên
 
 Đã đối chiếu bằng `git diff HEAD --exit-code`:

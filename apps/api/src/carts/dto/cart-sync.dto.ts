@@ -1,4 +1,4 @@
-import type { AddToCartDto } from '../../carts/carts.dto.js';
+import type { AddToCartDto } from '../carts.dto.js';
 
 // syncId nhận diện một lần chuyển giỏ, không phải mã khuyến mãi.
 export class CartSyncDto {

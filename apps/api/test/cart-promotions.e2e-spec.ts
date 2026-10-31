@@ -5,7 +5,7 @@ import { DrinkSize, PrismaClient } from '@prisma/client';
 import { describe, expect, it } from 'vitest';
 import { CartsService } from '../src/carts/carts.service.js';
 import { PromotionsService } from '../src/promotions/promotions.service.js';
-import { CartSyncService } from '../src/promotions/cart-sync.service.js';
+import { CartSyncService } from '../src/carts/cart-sync.service.js';
 import type { PrismaService } from '../src/prisma/prisma.service.js';
 
 describe('Giỏ hàng và khuyến mãi với PostgreSQL', () => {

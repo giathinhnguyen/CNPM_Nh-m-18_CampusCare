@@ -67,7 +67,7 @@ Mã hợp lệ được giữ qua luồng đăng nhập và được kiểm tra 
 
 ### Đồng bộ giỏ khách
 
-Endpoint bổ sung `POST /api/cart/sync-once` nhận `{ "syncId": "UUID-của-lô", "items": [...] }`, yêu cầu đăng nhập. Controller, service và DTO mới nằm trong `apps/api/src/promotions/`, được đăng ký trong `PromotionsModule`. Endpoint gốc `POST /api/cart/sync` và toàn bộ các file backend giỏ hàng giữ nguyên.
+Endpoint bổ sung `POST /api/cart/sync-once` nhận `{ "syncId": "UUID-của-lô", "items": [...] }`, yêu cầu đăng nhập. Controller và service đồng bộ nằm trong `apps/api/src/carts/`, DTO ở `apps/api/src/carts/dto/`, được đăng ký trong `CartsModule`. `PromotionsModule` chỉ đăng ký API khuyến mãi. Endpoint gốc `POST /api/cart/sync` và các file controller, service, DTO giỏ hàng gốc giữ nguyên; chỉ bổ sung đăng ký lớp đồng bộ trong module giỏ hàng.
 
 `guestCartSync.ts` giữ nguyên snapshot cùng `syncId` trong localStorage cho đến khi server xác nhận. Đồng bộ diễn ra khi trang lấy giỏ của khách đã đăng nhập, không phụ thuộc việc đã bấm thanh toán hay chưa. Lỗi mạng/server không xóa giỏ khách. Các lần tải giỏ đồng thời trong cùng tab dùng chung một request.
 
