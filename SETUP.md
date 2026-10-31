@@ -81,6 +81,8 @@ docker compose up -d --build api web
 - Khuyến mãi: http://localhost:5173/promotions
 - API khuyến mãi: http://localhost:3000/api/promotions
 - Rewards: http://localhost:3000/api/rewards/products
+- Đổi điểm: http://localhost:5173/rewards
+- Hướng dẫn đổi thưởng, migration và tài khoản test: [docs/rewards.md](docs/rewards.md)
 
 Xem log:
 

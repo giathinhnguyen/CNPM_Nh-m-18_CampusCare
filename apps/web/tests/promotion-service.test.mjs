@@ -25,3 +25,21 @@ test('supports pricing without a promotion and reports API validation errors', a
   };
   await assert.rejects(promotionService.quote(null, [{ productSizeId: 'size', quantity: 1 }]), error => error instanceof PromotionApiError && error.status === 400 && error.message === 'Giỏ chưa đủ điều kiện');
 });
+
+test('authenticated cart quotes send only persisted row IDs so reward pricing comes from the server', async () => {
+  const originalStorage = globalThis.localStorage;
+  const originalWindow = globalThis.window;
+  const token = `header.${btoa(JSON.stringify({ exp: Date.now() / 1000 + 3600 }))}.signature`;
+  globalThis.localStorage = { getItem: () => token };
+  globalThis.window = { dispatchEvent() {} };
+  try {
+    globalThis.fetch = async (url, init) => {
+      assert.equal(url, 'http://localhost:3000/api/cart/quote');
+      assert.equal(init.headers.get('Authorization'), `Bearer ${token}`);
+      assert.deepEqual(JSON.parse(init.body), { code: null, itemIds: ['reward-row', 'regular-row'] });
+      return new Response(JSON.stringify({ promotionCode: null, totalAmount: '50000', discountAmount: '0', finalAmount: '50000', items: [] }));
+    };
+    const quote = await promotionService.quote(null, [{ id: 'reward-row', productSizeId: 'size', quantity: 99, unitPrice: 0, isReward: true }, { id: 'regular-row', productSizeId: 'size', quantity: 1 }]);
+    assert.equal(quote.finalAmount, 50000);
+  } finally { globalThis.localStorage = originalStorage; globalThis.window = originalWindow; }
+});

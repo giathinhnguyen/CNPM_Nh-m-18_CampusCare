@@ -2,11 +2,17 @@ import { Controller, Get, Post, Patch, Delete, Body, Param, Req, UseGuards } fro
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard.js';
 import { CartsService } from './carts.service.js';
 import { AddToCartDto, UpdateQuantityDto } from './carts.dto.js';
+import { CartQuotesService } from './cart-quotes.service.js';
 
 @Controller('cart')
 @UseGuards(AuthGuard)
 export class CartsController {
-    constructor(private readonly cartsService: CartsService) { }
+    constructor(private readonly cartsService: CartsService, private readonly cartQuotes: CartQuotesService) { }
+
+    @Post('quote')
+    quote(@Req() req: AuthenticatedRequest, @Body() body: unknown) {
+        return this.cartQuotes.quote(req.user.id, body);
+    }
 
     @Get()
     async getCart(@Req() req: AuthenticatedRequest) {

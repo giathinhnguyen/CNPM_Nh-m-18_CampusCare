@@ -1,4 +1,5 @@
 import type { Promotion } from "../types";
+import { authenticatedFetch, TOKEN_KEY } from "./session.ts";
 
 const API_URL = import.meta.env?.VITE_API_URL ?? "http://localhost:3000/api";
 
@@ -31,6 +32,7 @@ export const promotionService = {
   async quote(
     code: string | null,
     items: {
+      id?: string;
       productSizeId: string;
       quantity: number;
       toppingIds?: string[];
@@ -38,22 +40,33 @@ export const promotionService = {
     }[],
     signal?: AbortSignal,
   ): Promise<CartQuote> {
-    const response = await fetch(`${API_URL}/promotions/quote`, {
-      method: "POST",
-      signal,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        code,
-        items: items.map((item) => ({
-          productSizeId: item.productSizeId,
-          quantity: item.quantity,
-          toppingIds:
-            item.toppingIds ??
-            item.toppings?.map((topping) => topping.id) ??
-            [],
-        })),
-      }),
-    });
+    const persisted =
+      typeof localStorage !== "undefined" &&
+      Boolean(localStorage.getItem(TOKEN_KEY)) &&
+      items.every((item) => item.id);
+    const response = await (persisted ? authenticatedFetch : fetch)(
+      `${API_URL}/${persisted ? "cart/quote" : "promotions/quote"}`,
+      {
+        method: "POST",
+        signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          persisted
+            ? { code, itemIds: items.map((item) => item.id) }
+            : {
+                code,
+                items: items.map((item) => ({
+                  productSizeId: item.productSizeId,
+                  quantity: item.quantity,
+                  toppingIds:
+                    item.toppingIds ??
+                    item.toppings?.map((topping) => topping.id) ??
+                    [],
+                })),
+              },
+        ),
+      },
+    );
     const data = await response.json();
     if (!response.ok)
       throw new PromotionApiError(

@@ -2,10 +2,10 @@ generator client {
   provider = "prisma-client-js"
 }
 
-  datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
-  }
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
 
 enum UserRole {
   CUSTOMER
@@ -105,21 +105,22 @@ model PasswordSetupChallenge {
 }
 
 model User {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email         String   @unique @db.VarChar(255)
-  passwordHash  String?  @map("password_hash") @db.VarChar(255)
-  fullName      String   @map("full_name") @db.VarChar(100)
-  googleId      String?  @unique @map("google_id") @db.VarChar(255)
-  role          UserRole @default(CUSTOMER)
-  loyaltyPoints Int      @default(0) @map("loyalty_points")
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email          String   @unique @db.VarChar(255)
+  passwordHash   String?  @map("password_hash") @db.VarChar(255)
+  fullName       String   @map("full_name") @db.VarChar(100)
+  googleId       String?  @unique @map("google_id") @db.VarChar(255)
+  role           UserRole @default(CUSTOMER)
+  loyaltyPoints  Int      @default(0) @map("loyalty_points")
+  reservedPoints Int      @default(0) @map("reserved_points")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  cartItems           CartItem[]
-  cartSyncs           CartSync[]
-  orders              Order[]
-  loyaltyTransactions LoyaltyTransaction[]
-  rewardRedemptions   RewardRedemption[]
+  cartItems              CartItem[]
+  cartSyncs              CartSync[]
+  orders                 Order[]
+  loyaltyTransactions    LoyaltyTransaction[]
+  rewardRedemptions      RewardRedemption[]
   passwordSetupChallenge PasswordSetupChallenge?
 
   @@map("users")
@@ -153,7 +154,7 @@ model Product {
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  category   Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  category   Category           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   sizes      ProductSize[]
   cartItems  CartItem[]
   orderItems OrderItem[]
@@ -199,22 +200,24 @@ model Topping {
 }
 
 model CartItem {
-  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId         String     @map("user_id") @db.Uuid
-  productId      String     @map("product_id") @db.Uuid
-  productSizeId  String     @map("product_size_id") @db.Uuid
-  sweetnessLevel DrinkLevel @default(HUNDRED) @map("sweetness_level")
-  iceLevel       DrinkLevel @default(HUNDRED) @map("ice_level")
-  quantity       Int
-  note           String?    @db.VarChar(255)
-  isSelected     Boolean    @default(true) @map("is_selected")
-  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                 String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String     @map("user_id") @db.Uuid
+  rewardRedemptionId String?    @unique @map("reward_redemption_id") @db.Uuid
+  productId          String     @map("product_id") @db.Uuid
+  productSizeId      String     @map("product_size_id") @db.Uuid
+  sweetnessLevel     DrinkLevel @default(HUNDRED) @map("sweetness_level")
+  iceLevel           DrinkLevel @default(HUNDRED) @map("ice_level")
+  quantity           Int
+  note               String?    @db.VarChar(255)
+  isSelected         Boolean    @default(true) @map("is_selected")
+  createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product     Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
-  productSize ProductSize       @relation(fields: [productSizeId], references: [id], onDelete: Restrict)
-  toppings    CartItemTopping[]
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product          Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productSize      ProductSize       @relation(fields: [productSizeId], references: [id], onDelete: Restrict)
+  toppings         CartItemTopping[]
+  rewardRedemption RewardRedemption? @relation(fields: [rewardRedemptionId], references: [id], onDelete: Restrict)
 
   @@index([userId])
   @@index([productId])
@@ -249,23 +252,23 @@ model CartSync {
 }
 
 model Promotion {
-  id                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  code              String       @unique @db.VarChar(50)
-  title             String?      @db.VarChar(100)
-  description       String?      @db.Text
-  displayOrder      Int          @default(0) @map("display_order")
-  appliesToAllProducts Boolean   @default(true) @map("applies_to_all_products")
-  discountType      DiscountType @map("discount_type")
-  discountValue     Decimal      @map("discount_value") @db.Decimal(12, 0)
-  maxDiscountAmount Decimal?     @map("max_discount_amount") @db.Decimal(12, 0)
-  minOrderAmount    Decimal      @default(0) @map("min_order_amount") @db.Decimal(12, 0)
-  isActive          Boolean      @default(true) @map("is_active")
-  startDate         DateTime?    @map("start_date") @db.Timestamptz(6)
-  endDate           DateTime?    @map("end_date") @db.Timestamptz(6)
-  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                   String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code                 String       @unique @db.VarChar(50)
+  title                String?      @db.VarChar(100)
+  description          String?      @db.Text
+  displayOrder         Int          @default(0) @map("display_order")
+  appliesToAllProducts Boolean      @default(true) @map("applies_to_all_products")
+  discountType         DiscountType @map("discount_type")
+  discountValue        Decimal      @map("discount_value") @db.Decimal(12, 0)
+  maxDiscountAmount    Decimal?     @map("max_discount_amount") @db.Decimal(12, 0)
+  minOrderAmount       Decimal      @default(0) @map("min_order_amount") @db.Decimal(12, 0)
+  isActive             Boolean      @default(true) @map("is_active")
+  startDate            DateTime?    @map("start_date") @db.Timestamptz(6)
+  endDate              DateTime?    @map("end_date") @db.Timestamptz(6)
+  createdAt            DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  orders Order[]
+  orders   Order[]
   products PromotionProduct[]
 
   @@index([isActive, startDate, endDate])
@@ -288,6 +291,8 @@ model Order {
   id                   String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orderCode            String      @unique @map("order_code") @db.VarChar(30)
   userId               String      @map("user_id") @db.Uuid
+  checkoutKey          String?     @map("checkout_key") @db.Uuid
+  checkoutPayloadHash  String?     @map("checkout_payload_hash") @db.VarChar(64)
   promotionId          String?     @map("promotion_id") @db.Uuid
   promotionCode        String?     @map("promotion_code") @db.VarChar(50)
   totalAmount          Decimal     @map("total_amount") @db.Decimal(12, 0)
@@ -306,6 +311,7 @@ model Order {
   loyaltyTxs        LoyaltyTransaction[]
   rewardRedemptions RewardRedemption[]
 
+  @@unique([userId, checkoutKey])
   @@index([userId])
   @@index([promotionId])
   @@index([status, reservationExpiresAt])
@@ -316,6 +322,8 @@ model Order {
 model OrderItem {
   id                  String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   orderId             String     @map("order_id") @db.Uuid
+  rewardRedemptionId  String?    @unique @map("reward_redemption_id") @db.Uuid
+  rewardPoints        Int?       @map("reward_points")
   productId           String     @map("product_id") @db.Uuid
   productName         String     @map("product_name") @db.VarChar(100)
   size                DrinkSize
@@ -329,9 +337,10 @@ model OrderItem {
   totalPrice          Decimal    @map("total_price") @db.Decimal(12, 0)
   note                String?    @db.VarChar(255)
 
-  order    Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product  Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
-  toppings OrderItemTopping[]
+  order            Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product          Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  toppings         OrderItemTopping[]
+  rewardRedemption RewardRedemption?  @relation(fields: [rewardRedemptionId], references: [id], onDelete: Restrict)
 
   @@index([orderId])
   @@index([productId])
@@ -392,6 +401,7 @@ model RewardProduct {
 model RewardRedemption {
   id                     String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId                 String                 @map("user_id") @db.Uuid
+  idempotencyKey         String?                @map("idempotency_key") @db.Uuid
   rewardProductId        String                 @map("reward_product_id") @db.Uuid
   orderId                String?                @map("order_id") @db.Uuid
   productNameSnapshot    String                 @map("product_name_snapshot") @db.VarChar(100)
@@ -407,7 +417,10 @@ model RewardRedemption {
   rewardProduct       RewardProduct        @relation(fields: [rewardProductId], references: [id], onDelete: Restrict)
   order               Order?               @relation(fields: [orderId], references: [id], onDelete: SetNull)
   loyaltyTransactions LoyaltyTransaction[]
+  cartItem            CartItem?
+  orderItem           OrderItem?
 
+  @@unique([userId, idempotencyKey])
   @@index([userId])
   @@index([rewardProductId])
   @@index([orderId])
@@ -429,6 +442,7 @@ model LoyaltyTransaction {
   order            Order?            @relation(fields: [orderId], references: [id], onDelete: SetNull)
   rewardRedemption RewardRedemption? @relation(fields: [rewardRedemptionId], references: [id], onDelete: SetNull)
 
+  @@unique([rewardRedemptionId, type])
   @@index([userId])
   @@index([orderId])
   @@index([rewardRedemptionId])

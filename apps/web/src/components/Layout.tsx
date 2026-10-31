@@ -18,7 +18,7 @@ import { cx } from "../lib/utils";
 const navItems = [
   { label: "Trang chủ", to: "/", enabled: true },
   { label: "Khuyến mãi", to: "/promotions", enabled: true },
-  { label: "Đơn hàng", to: "/orders", enabled: false },
+  { label: "Đổi điểm", to: "/rewards", enabled: true },
 ];
 
 export default function Layout() {
@@ -175,7 +175,7 @@ export default function Layout() {
                   ) : (
                     <>
                       <p className="px-3 pb-3 pt-2 text-xs leading-5 text-[#8b776b]">
-                        Đăng nhập để quản lý đơn hàng và tích điểm thưởng.
+                        Đăng nhập để đổi điểm và quản lý giỏ hàng.
                       </p>
 
                       <Link
@@ -334,7 +334,7 @@ export default function Layout() {
                 Menu hôm nay
               </Link>
               <Link to="/promotions" className="transition hover:text-white">Khuyến mãi</Link>
-              <span className="cursor-not-allowed text-[#8d7b70]" title="Chức năng đang được phát triển">Đơn hàng của tôi</span>
+              <Link to="/rewards" className="transition hover:text-white">Đổi điểm</Link>
               <Link to="/cart" className="transition hover:text-white">
                 Giỏ hàng
               </Link>
