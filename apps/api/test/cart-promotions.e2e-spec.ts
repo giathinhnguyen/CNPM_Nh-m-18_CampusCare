@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { CartsService } from '../src/carts/carts.service.js';
 import { PromotionsService } from '../src/promotions/promotions.service.js';
 import type { PrismaService } from '../src/prisma/prisma.service.js';
+import { recipeFixture } from './inventory-fixture.js';
+import { InventoryService } from '../src/inventory/inventory.service.js';
 
 describe('Giỏ hàng và khuyến mãi với PostgreSQL', () => {
   it('gộp bằng service giỏ gốc, lưu lựa chọn và tính lại mã theo giỏ', async () => {
@@ -39,6 +41,7 @@ describe('Giỏ hàng và khuyến mãi với PostgreSQL', () => {
           const topping = await tx.topping.create({
             data: { name: prefix, price: 10000 },
           });
+          await recipeFixture(tx, size.id, 10);
           const promotion = await tx.promotion.create({
             data: {
               code: prefix,
@@ -108,13 +111,11 @@ describe('Giỏ hàng và khuyến mãi với PostgreSQL', () => {
             'không còn hiệu lực',
           );
           await expect(
-            promos.calculateQuote(tx, {
-              items: [
+            new InventoryService(database).assertAvailable(tx, [
                 { productSizeId: size.id, quantity: 6 },
                 { productSizeId: size.id, quantity: 5 },
-              ],
-            }),
-          ).rejects.toBeInstanceOf(BadRequestException);
+              ]),
+          ).rejects.toThrow('nguyên liệu');
 
           await carts.updateQuantity(user.id, rowId, 1);
           expect((await carts.getCart(user.id)).totalAmount).toBe(50000);

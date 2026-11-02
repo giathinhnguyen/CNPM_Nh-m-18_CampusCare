@@ -6,6 +6,7 @@ import {
 import { DrinkLevel, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AddToCartDto } from './carts.dto.js';
+import { InventoryService } from '../inventory/inventory.service.js';
 import {
   isUuid,
   lockCustomer,
@@ -14,9 +15,15 @@ import {
 
 @Injectable()
 export class CartsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private inventory: InventoryService = new InventoryService(prisma),
+  ) {}
 
-  async getCart(userId: string, database: Prisma.TransactionClient = this.prisma) {
+  async getCart(
+    userId: string,
+    database: Prisma.TransactionClient = this.prisma,
+  ) {
     const items = await database.cartItem.findMany({
       where: { userId },
       include: {
@@ -27,55 +34,57 @@ export class CartsService {
       },
       orderBy: { createdAt: 'desc' },
     });
-    const quantities = new Map<string, number>();
-    for (const item of items)
-      quantities.set(
-        item.productId,
-        (quantities.get(item.productId) ?? 0) + item.quantity,
-      );
-    const formattedItems = items.map((item) => {
-      const reward = item.rewardRedemption;
-      const unitPrice = reward
-        ? 0
-        : Number(item.product.basePrice) +
-          Number(item.productSize.priceAdjustment) +
-          item.toppings.reduce((sum, t) => sum + Number(t.topping.price), 0);
-      const isOutOfStock =
-        !item.product.isActive ||
-        !item.product.category.isActive ||
-        !item.productSize.isActive ||
-        item.product.stockQuantity < (quantities.get(item.productId) ?? 0) ||
-        item.toppings.some((t) => !t.topping.isActive) ||
-        Boolean(
-          reward &&
-          (reward.status !== 'PENDING' || !reward.rewardProduct.isActive),
+    const formattedItems = await Promise.all(
+      items.map(async (item) => {
+        const available = await this.inventory.availability(
+          item.productSizeId,
+          item.sweetnessLevel,
+          item.iceLevel,
+          database,
         );
-      return {
-        id: item.id,
-        productId: item.productId,
-        productName: item.product.name,
-        imageUrl: item.product.imageUrl,
-        size: item.productSize.size,
-        productSizeId: item.productSizeId,
-        sweetnessLevel: item.sweetnessLevel,
-        iceLevel: item.iceLevel,
-        quantity: item.quantity,
-        note: item.note,
-        isSelected: item.isSelected,
-        unitPrice,
-        totalPrice: unitPrice * item.quantity,
-        isReward: Boolean(reward),
-        rewardPoints: reward?.totalPointsSpent ?? null,
-        rewardRedemptionId: item.rewardRedemptionId,
-        toppings: item.toppings.map((t) => ({
-          id: t.topping.id,
-          name: t.topping.name,
-          price: Number(t.topping.price),
-        })),
-        stockQuantity: item.product.stockQuantity,
-        isOutOfStock,
-      };
-    });
+        const reward = item.rewardRedemption;
+        const unitPrice = reward
+          ? 0
+          : Number(item.product.basePrice) +
+            Number(item.productSize.priceAdjustment) +
+            item.toppings.reduce((sum, t) => sum + Number(t.topping.price), 0);
+        const isOutOfStock =
+          !item.product.isActive ||
+          !item.product.category.isActive ||
+          !item.productSize.isActive ||
+          available < item.quantity ||
+          item.toppings.some((t) => !t.topping.isActive) ||
+          Boolean(
+            reward &&
+            (reward.status !== 'PENDING' || !reward.rewardProduct.isActive),
+          );
+        return {
+          id: item.id,
+          productId: item.productId,
+          productName: item.product.name,
+          imageUrl: item.product.imageUrl,
+          size: item.productSize.size,
+          productSizeId: item.productSizeId,
+          sweetnessLevel: item.sweetnessLevel,
+          iceLevel: item.iceLevel,
+          quantity: item.quantity,
+          note: item.note,
+          isSelected: item.isSelected,
+          unitPrice,
+          totalPrice: unitPrice * item.quantity,
+          isReward: Boolean(reward),
+          rewardPoints: reward?.totalPointsSpent ?? null,
+          rewardRedemptionId: item.rewardRedemptionId,
+          toppings: item.toppings.map((t) => ({
+            id: t.topping.id,
+            name: t.topping.name,
+            price: Number(t.topping.price),
+          })),
+          stockQuantity: available,
+          isOutOfStock,
+        };
+      }),
+    );
     return {
       items: formattedItems,
       totalAmount: formattedItems.reduce(
@@ -142,14 +151,15 @@ export class CartsService {
       where: { userId, productId },
       include: { toppings: true },
     });
-    if (
-      allItems.reduce((sum, item) => sum + item.quantity, 0) + quantity >
-      size.product.stockQuantity
-    ) {
-      throw new BadRequestException(
-        `Hiện số lượng tối đa của món ${size.product.name} là ${size.product.stockQuantity} ly (tính cả các lựa chọn đã có trong giỏ).`,
-      );
-    }
+    await this.inventory.assertAvailable(tx, [
+      ...(await tx.cartItem.findMany({ where: { userId } })),
+      {
+        productSizeId,
+        quantity,
+        sweetnessLevel: dto.sweetnessLevel,
+        iceLevel: dto.iceLevel,
+      },
+    ]);
     const sweetnessLevel = dto.sweetnessLevel ?? 'HUNDRED';
     const iceLevel = dto.iceLevel ?? 'HUNDRED';
     // A regular purchase must never merge into the zero-priced reward row.
@@ -215,12 +225,12 @@ export class CartsService {
       if (item.rewardRedemptionId && quantity !== undefined && quantity !== 1)
         throw new BadRequestException('Mỗi lượt đổi thưởng chỉ có 1 sản phẩm');
       if (quantity !== undefined && quantity > item.quantity) {
-        const total = await tx.cartItem.aggregate({
-          where: { userId, productId: item.productId, id: { not: itemId } },
-          _sum: { quantity: true },
-        });
-        if ((total._sum.quantity ?? 0) + quantity > item.product.stockQuantity)
-          throw new BadRequestException('Số lượng trong giỏ vượt tồn kho');
+        await this.inventory.assertAvailable(tx, [
+          ...(await tx.cartItem.findMany({
+            where: { userId, id: { not: itemId } },
+          })),
+          { ...item, quantity },
+        ]);
       }
       return tx.cartItem.update({
         where: { id: itemId },
@@ -255,21 +265,18 @@ export class CartsService {
             where: { id: input.productId },
           });
           if (!product?.isActive) continue;
-          const existing = await tx.cartItem.aggregate({
-            where: { userId, productId: input.productId },
-            _sum: { quantity: true },
-          });
-          const remaining =
-            product.stockQuantity - (existing._sum.quantity ?? 0);
-          if (input.quantity > remaining)
-            warnings.push(
-              `Món "${product.name}" đã được giới hạn theo tồn kho ${product.stockQuantity} ly.`,
-            );
-          if (remaining <= 0) continue;
-          await this.add(tx, userId, {
-            ...input,
-            quantity: Math.min(remaining, input.quantity),
-          });
+          try {
+            await this.add(tx, userId, input);
+          } catch (error) {
+            if (
+              error instanceof BadRequestException ||
+              (error instanceof Error && error.name === 'ConflictException')
+            )
+              warnings.push(
+                `Món "${product.name}" chưa được thêm: ${error.message}`,
+              );
+            else throw error;
+          }
         }
       },
       { timeout: 15000 },

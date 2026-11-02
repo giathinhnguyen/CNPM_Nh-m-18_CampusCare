@@ -75,7 +75,7 @@ export class PromotionsService {
         },
         include: {
           product: {
-            select: { id: true, basePrice: true, stockQuantity: true },
+            select: { id: true, basePrice: true },
           },
         },
       }),
@@ -102,7 +102,6 @@ export class PromotionsService {
     );
     let totalAmount = new Prisma.Decimal(0);
     let eligibleAmount = new Prisma.Decimal(0);
-    const quantities = new Map<string, number>();
     const pricedItems: {
       productSizeId: string;
       unitPrice: Prisma.Decimal;
@@ -119,13 +118,6 @@ export class PromotionsService {
         .plus(size.priceAdjustment)
         .plus(toppingAmount);
       const lineAmount = unitPrice.times(item.quantity);
-      const quantity = (quantities.get(size.product.id) ?? 0) + item.quantity;
-      if (quantity > size.product.stockQuantity) {
-        throw new BadRequestException(
-          'Số lượng món được chọn vượt tồn kho. Vui lòng kiểm tra lại giỏ hàng',
-        );
-      }
-      quantities.set(size.product.id, quantity);
       pricedItems.push({
         productSizeId: size.id,
         unitPrice,

@@ -2,6 +2,8 @@ export interface ProductSize {
   id: string;
   size: "S" | "M" | "L";
   priceAdjustment: number;
+  stockQuantity?: number;
+  customizationPolicies?: { axis: 'SUGAR' | 'ICE'; allowedLevels: number[]; defaultLevel: number; policyNote: string | null }[];
 }
 
 export interface Product {

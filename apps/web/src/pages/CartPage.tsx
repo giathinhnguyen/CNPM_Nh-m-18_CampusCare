@@ -305,7 +305,7 @@ export default function CartPage() {
         navigate("/login", { state: { from: "/cart" } });
         return;
       }
-      showToast("Đã lưu lựa chọn và mã ưu đãi. Chức năng đặt hàng hiện chưa khả dụng.", "info");
+      navigate("/checkout");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Không thể xác nhận giá", "error");
     } finally {

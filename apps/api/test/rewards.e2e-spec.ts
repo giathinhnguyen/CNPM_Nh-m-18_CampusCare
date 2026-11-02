@@ -7,6 +7,7 @@ import { CartsService } from '../src/carts/carts.service.js';
 import { CartQuotesService } from '../src/carts/cart-quotes.service.js';
 import { PromotionsService } from '../src/promotions/promotions.service.js';
 import type { PrismaService } from '../src/prisma/prisma.service.js';
+import { recipeFixture } from './inventory-fixture.js';
 
 describe('Đổi thưởng: transaction PostgreSQL và yêu cầu đồng thời', () => {
   const prisma = new PrismaClient();
@@ -20,6 +21,7 @@ describe('Đổi thưởng: transaction PostgreSQL và yêu cầu đồng thời
   );
   const userIds: string[] = [];
   const categoryIds: string[] = [];
+  const ingredientIds: string[] = [];
   afterAll(async () => {
     const orderIds = (
       await prisma.order.findMany({
@@ -45,6 +47,8 @@ describe('Đổi thưởng: transaction PostgreSQL và yêu cầu đồng thời
       where: { categoryId: { in: categoryIds } },
     });
     await prisma.category.deleteMany({ where: { id: { in: categoryIds } } });
+    await prisma.ingredientStock.deleteMany({ where: { ingredientId: { in: ingredientIds } } });
+    await prisma.ingredient.deleteMany({ where: { id: { in: ingredientIds } } });
     await prisma.$disconnect();
   });
   async function customer(
@@ -84,7 +88,9 @@ describe('Đổi thưởng: transaction PostgreSQL và yêu cầu đồng thời
     const reward = await prisma.rewardProduct.create({
       data: { productSizeId: size.id, pointsRequired: cost },
     });
-    return { user, category, product, size, reward };
+    const ingredient = await recipeFixture(prisma, size.id, stock);
+    ingredientIds.push(ingredient.id);
+    return { user, category, product, size, reward, ingredient };
   }
   const redeem = (
     f: Awaited<ReturnType<typeof fixture>>,
@@ -218,11 +224,11 @@ describe('Đổi thưởng: transaction PostgreSQL và yêu cầu đồng thời
         productSizeId: f.size.id,
         quantity: 1,
       }),
-    ).rejects.toThrow('tối đa');
+    ).rejects.toThrow('nguyên liệu');
     const regular = cart.items.find((item) => !item.isReward)!;
     await expect(
       carts.updateQuantity(f.user.id, regular.id, 2),
-    ).rejects.toThrow('vượt tồn kho');
+    ).rejects.toThrow('nguyên liệu');
   });
   it('giỏ đã đủ số lượng tồn kho không thể thêm món thưởng', async () => {
     const f = await fixture(120, 1);
@@ -231,7 +237,7 @@ describe('Đổi thưởng: transaction PostgreSQL và yêu cầu đồng thời
       productSizeId: f.size.id,
       quantity: 1,
     });
-    await expect(redeem(f)).rejects.toThrow('tồn kho');
+    await expect(redeem(f)).rejects.toThrow('nguyên liệu');
   });
   it('báo giá dùng món thuộc tài khoản; không nhận giá hoặc cờ đổi thưởng từ client', async () => {
     const f = await fixture();
@@ -310,16 +316,16 @@ describe('Đổi thưởng: transaction PostgreSQL và yêu cầu đồng thời
     const f = await fixture();
     const redeemed = await redeem(f);
     const itemIds = [redeemed.cartItem!.id];
-    await prisma.product.update({
-      where: { id: f.product.id },
-      data: { stockQuantity: 0 },
+    await prisma.ingredientStock.update({
+      where: { ingredientId: f.ingredient.id },
+      data: { onHand: 0 },
     });
     await expect(cartQuotes.quote(f.user.id, { itemIds })).rejects.toThrow(
       'khả dụng',
     );
-    await prisma.product.update({
-      where: { id: f.product.id },
-      data: { stockQuantity: 10 },
+    await prisma.ingredientStock.update({
+      where: { ingredientId: f.ingredient.id },
+      data: { onHand: 200 },
     });
     await prisma.rewardProduct.update({
       where: { id: f.reward.id },

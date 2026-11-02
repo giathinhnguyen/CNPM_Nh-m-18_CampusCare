@@ -1,13 +1,36 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { InventoryService } from '../inventory/inventory.service.js';
 
 @Injectable()
 export class ProductsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly inventory: InventoryService,
+  ) {}
+
+  private async withAvailability<T extends { sizes: { id: string }[] }>(
+    product: T,
+  ) {
+    const sizes = await Promise.all(
+      product.sizes.map(async (size) => ({
+        ...size,
+        stockQuantity: await this.inventory.availability(size.id),
+        customizationPolicies: await this.prisma.customizationPolicy.findMany({
+          where: { productSizeId: size.id },
+        }),
+      })),
+    );
+    return {
+      ...product,
+      sizes,
+      stockQuantity: Math.max(0, ...sizes.map((s) => s.stockQuantity)),
+    };
+  }
 
   // Lấy danh sách sản phẩm đang kinh doanh
   async findAll() {
-    return this.prisma.product.findMany({
+    const products = await this.prisma.product.findMany({
       where: {
         isActive: true,
         category: { isActive: true },
@@ -38,6 +61,9 @@ export class ProductsService {
       },
       orderBy: { name: 'asc' },
     });
+    return Promise.all(
+      products.map((product) => this.withAvailability(product)),
+    );
   }
 
   // Lấy chi tiết sản phẩm theo ID
@@ -61,6 +87,6 @@ export class ProductsService {
       throw new NotFoundException('Không tìm thấy sản phẩm');
     }
 
-    return product;
+    return this.withAvailability(product);
   }
 }

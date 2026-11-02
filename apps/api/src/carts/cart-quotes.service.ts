@@ -8,6 +8,7 @@ import {
   validateObject,
 } from '../rewards/reward-transactions.js';
 import { CartsService } from './carts.service.js';
+import { InventoryService } from '../inventory/inventory.service.js';
 
 @Injectable()
 export class CartQuotesService {
@@ -15,6 +16,7 @@ export class CartQuotesService {
     private readonly prisma: PrismaService,
     private readonly carts: CartsService,
     private readonly promotions: PromotionsService,
+    private readonly inventory: InventoryService = new InventoryService(prisma),
   ) {}
 
   async quote(userId: string, body: unknown) {
@@ -57,6 +59,7 @@ export class CartQuotesService {
         return item;
       });
       const regular = selected.filter((item) => !item.isReward);
+      await this.inventory.assertAvailable(tx, selected);
       if (!regular.length && code)
         throw new BadRequestException(
           'Mã ưu đãi chỉ áp dụng cho sản phẩm mua thường',

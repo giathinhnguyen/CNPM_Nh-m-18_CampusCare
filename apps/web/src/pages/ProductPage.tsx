@@ -32,6 +32,16 @@ export default function ProductPage() {
   const [sweetness, setSweetness] = useState("100%")
   const [ice, setIce] = useState("100%")
   const [quantity, setQuantity] = useState(1)
+  const [availability, setAvailability] = useState<{ key: string; stock: number; error?: string } | null>(null)
+  const availabilityKey = `${selectedSize}:${sweetness}:${ice}`
+  useEffect(() => {
+    if (!selectedSize) return
+    let active = true
+    void catalogService.getAvailability(selectedSize, mapLevelToEnum(sweetness), mapLevelToEnum(ice))
+      .then(result => { if (active) setAvailability({ key: availabilityKey, stock: result.stockQuantity }) })
+      .catch(() => { if (active) setAvailability({ key: availabilityKey, stock: 0, error: 'Chưa kiểm tra được nguyên liệu. Vui lòng tải lại trang.' }) })
+    return () => { active = false }
+  }, [selectedSize, sweetness, ice, availabilityKey])
 
   // State cho quá trình bấm nút thêm vào giỏ
   const [adding, setAdding] = useState(false)
@@ -59,7 +69,7 @@ export default function ProductPage() {
         ])
         setProduct(data)
         setToppings(toppingData)
-        setSelectedSize(data.sizes[0]?.id ?? null)
+        setSelectedSize(data.sizes.find(size => (size.stockQuantity ?? 0) > 0)?.id ?? data.sizes[0]?.id ?? null)
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : "Không thể tải sản phẩm")
       } finally {
@@ -87,6 +97,8 @@ export default function ProductPage() {
   }
 
   const selected = product.sizes.find((size) => size.id === selectedSize) ?? product.sizes[0]
+  const checkingStock = availability?.key !== availabilityKey
+  const availableStock = checkingStock ? 0 : availability!.stock
   const price = product.basePrice + (selected?.priceAdjustment ?? 0)
   const toppingTotal = toppings
     .filter((topping) => selectedToppings.includes(topping.id))
@@ -110,14 +122,11 @@ export default function ProductPage() {
       setAdding(true)
 
       // Kiểm tra tổng số lượng đã có trong giỏ hàng
-      const cartData = await cartService.getCart(Boolean(user))
-      const inCart = (cartData.items || [])
-        .filter((item: any) => item.productId === product.id)
-        .reduce((sum: number, item: any) => sum + item.quantity, 0)
 
-      if (quantity + inCart > product.stockQuantity) {
+
+      if (quantity > availableStock) {
         showToast(
-          `Hiện số lượng tối đa của món ${product.name} là ${product.stockQuantity} ly (tính cả các lựa chọn đã có trong giỏ).`,
+          `Hiện số lượng tối đa của món ${product.name} là ${availableStock} ly theo cấu hình đang chọn.`,
           "error",
         )
         return
@@ -133,7 +142,7 @@ export default function ProductPage() {
         iceLevel: mapLevelToEnum(ice),
         quantity,
         unitPrice: price + toppingTotal,
-        stockQuantity: product.stockQuantity,
+        stockQuantity: availableStock,
         toppingIds: selectedToppings,
         toppings: toppings.filter(t => selectedToppings.includes(t.id)), // 👈 Bổ sung tên topping
       }, !!user)
@@ -148,7 +157,7 @@ export default function ProductPage() {
     }
   }
 
-  const isOutOfStock = product.stockQuantity <= 0
+  const isOutOfStock = availableStock <= 0
 
   return (
     <main className="mx-auto max-w-7xl px-5 pb-20 pt-16 sm:px-8 lg:px-10">
@@ -173,14 +182,14 @@ export default function ProductPage() {
 
           <div className="mt-7 flex items-center gap-3 border-b border-[#e5dbd1] pb-7 text-sm text-[#637a64]">
             <ShieldCheck size={20} />
-            {!isOutOfStock ? `Còn ${product.stockQuantity} phần hôm nay` : <span className="font-bold text-red-600">Tạm hết hàng</span>}
+            {checkingStock ? 'Đang kiểm tra nguyên liệu...' : availability?.error ? availability.error : !isOutOfStock ? `Có thể pha ${availableStock} ly theo lựa chọn này` : <span className="font-bold text-red-600">Tạm hết nguyên liệu</span>}
           </div>
 
           <div className="mt-7">
             <p className="text-sm font-bold text-[#3b2a22]">Chọn kích cỡ</p>
             <div className="mt-3 flex flex-wrap gap-3">
               {product.sizes.map((size) => (
-                <button key={size.id} type="button" onClick={() => setSelectedSize(size.id)} className={`min-w-20 rounded-2xl border px-5 py-3 text-sm font-semibold transition ${selectedSize === size.id ? "border-[#3b241c] bg-[#3b241c] text-white" : "border-[#ddd2c8] bg-white text-[#6c584d] hover:border-[#9c806d]"}`}>
+                <button key={size.id} type="button" disabled={!size.customizationPolicies?.length} onClick={() => { setSelectedSize(size.id); setSweetness('100%'); setIce('100%'); setQuantity(1); }} className={`min-w-20 rounded-2xl border px-5 py-3 text-sm font-semibold transition disabled:opacity-40 ${selectedSize === size.id ? "border-[#3b241c] bg-[#3b241c] text-white" : "border-[#ddd2c8] bg-white text-[#6c584d] hover:border-[#9c806d]"}`}>
                   Size {size.size}
                   {size.priceAdjustment > 0 && <span className="ml-1 text-xs opacity-70">+{formatCurrency(size.priceAdjustment)}</span>}
                 </button>
@@ -209,8 +218,9 @@ export default function ProductPage() {
             </div>
           </div>
 
-          <OptionGroup title="Độ ngọt" options={["120%", "100%", "50%", "0%"]} value={sweetness} onChange={setSweetness} />
-          <OptionGroup title="Mức đá" options={["120%", "100%", "50%", "0%"]} value={ice} onChange={setIce} />
+          <OptionGroup title="Độ ngọt" options={(selected?.customizationPolicies?.find(p => p.axis === 'SUGAR')?.allowedLevels ?? [100]).map(n => `${n}%`)} value={sweetness} onChange={setSweetness} />
+          <p className="mt-2 text-xs text-[#8a7567]">{selected?.customizationPolicies?.find(p => p.axis === 'SUGAR')?.policyNote ?? 'Mức ngọt chỉ điều chỉnh nước đường thêm vào.'}</p>
+          <OptionGroup title="Mức đá" options={(selected?.customizationPolicies?.find(p => p.axis === 'ICE')?.allowedLevels ?? [100]).map(n => `${n}%`)} value={ice} onChange={setIce} />
 
           <div className="mt-9 flex items-center justify-between gap-5">
             <h2 className="font-serif text-2xl text-[#3b2a22]">Số lượng</h2>
@@ -222,22 +232,19 @@ export default function ProductPage() {
                 aria-label="Tăng số lượng"
                 onClick={async () => {
                   try {
-                    const cartData = await cartService.getCart(Boolean(user))
-                    const inCart = (cartData.items || [])
-                      .filter((item: any) => item.productId === product.id)
-                      .reduce((sum: number, item: any) => sum + item.quantity, 0)
-                    if (quantity + inCart >= product.stockQuantity) {
+
+                    if (quantity >= availableStock) {
                       showToast(
-                        `Hiện số lượng tối đa của món ${product.name} là ${product.stockQuantity} ly (tính cả các lựa chọn đã có trong giỏ).`,
+                        `Hiện số lượng tối đa của món ${product.name} là ${availableStock} ly theo cấu hình đang chọn.`,
                         "error",
                       )
                       return
                     }
                     setQuantity((value) => value + 1)
                   } catch {
-                    if (quantity >= product.stockQuantity) {
+                    if (quantity >= availableStock) {
                       showToast(
-                        `Hiện số lượng tối đa của món ${product.name} là ${product.stockQuantity} ly (tính cả các lựa chọn đã có trong giỏ).`,
+                        `Hiện số lượng tối đa của món ${product.name} là ${availableStock} ly theo cấu hình đang chọn.`,
                         "error",
                       )
                       return
@@ -276,7 +283,7 @@ export default function ProductPage() {
                 </>
               ) : (
                 <>
-                  <Plus size={22} /> {adding ? "Đang thêm..." : isOutOfStock ? "Tạm hết hàng" : "Thêm vào giỏ"}
+                  <Plus size={22} /> {adding ? "Đang thêm..." : checkingStock ? "Đang kiểm tra kho..." : availability?.error ? "Chưa kiểm tra được kho" : isOutOfStock ? "Tạm hết hàng" : "Thêm vào giỏ"}
                 </>
               )}
             </button>
