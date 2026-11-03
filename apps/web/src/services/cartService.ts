@@ -1,48 +1,48 @@
-import { authenticatedFetch } from './session.js';
+import { authenticatedFetch } from './session.ts';
+import { syncGuestCart } from './guestCartSync.ts';
+import { getCartOwner } from './cartIntegrationService.ts';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const API_BASE = import.meta.env?.VITE_API_URL || 'http://localhost:3000/api';
+const ACCOUNT_CART_API = `${API_BASE}/rewards/cart`;
 const LOCAL_STORAGE_KEY = 'brewlite_guest_cart';
-let isSyncing = false;
+
+function notifyCartUpdated() {
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('cart-updated'));
+}
 
 export const cartService = {
+    // Reading the header count must not trigger guest-cart synchronization.
+    getItemCount: async (isLoggedIn: boolean): Promise<number> => {
+        let items: { quantity: number }[];
+        if (isLoggedIn) {
+            const res = await authenticatedFetch(ACCOUNT_CART_API);
+            if (!res.ok) throw new Error('Không thể tải số lượng giỏ hàng');
+            items = (await res.json()).items;
+        } else {
+            items = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) ?? '[]');
+        }
+        return items.reduce((total, item) =>
+            total + (Number.isSafeInteger(item.quantity) && item.quantity > 0 ? item.quantity : 0), 0);
+    },
     // 1. LẤY GIỎ HÀNG & TỰ ĐỘNG ĐỒNG BỘ KHÔNG BỊ DƯ
     getCart: async (isLoggedIn: boolean) => {
         if (isLoggedIn) {
-            // Kiểm tra nếu có món từ lúc chưa đăng nhập thì đẩy lên DB
-            const localData = localStorage.getItem(LOCAL_STORAGE_KEY);
-            if (localData && !isSyncing) {
-                isSyncing = true;
-                localStorage.removeItem(LOCAL_STORAGE_KEY);
-                try {
-                    const localItems = JSON.parse(localData);
-                    if (Array.isArray(localItems) && localItems.length > 0) {
-                        const syncRes = await authenticatedFetch(`${API_BASE}/cart/sync`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ items: localItems }),
-                        });
-                        if (syncRes.ok) {
-                            const syncData = await syncRes.json();
-                            // Lưu cảnh báo vượt tồn kho vào sessionStorage để CartPage đọc và hiển thị
-                            if (Array.isArray(syncData.warnings) && syncData.warnings.length > 0) {
-                                sessionStorage.setItem('brewlite_sync_warnings', JSON.stringify(syncData.warnings));
-                            }
-                        }
-                    }
-                } catch (err) {
-                    console.error("Lỗi đồng bộ giỏ hàng:", err);
-                } finally {
-                    isSyncing = false;
-                }
+            const owner = getCartOwner();
+            if (!owner) throw new Error('Vui lòng đăng nhập lại');
+            const syncData = await syncGuestCart(owner, body => authenticatedFetch(`${ACCOUNT_CART_API}/sync`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+            }), getCartOwner) as { warnings?: string[] } | undefined;
+            if (syncData?.warnings?.length) {
+                sessionStorage.setItem('brewlite_sync_warnings', JSON.stringify(syncData.warnings));
             }
+            if (syncData) notifyCartUpdated();
 
             // Lấy toàn bộ giỏ hàng chuẩn từ PostgreSQL về
-            try {
-                const res = await authenticatedFetch(`${API_BASE}/cart`);
-                if (res.ok) return await res.json();
-            } catch (err) {
-                console.warn("Lỗi lấy giỏ từ server");
-            }
+            const res = await authenticatedFetch(ACCOUNT_CART_API);
+            if (!res.ok) throw new Error('Không thể tải giỏ tài khoản. Vui lòng thử lại');
+            const cart = await res.json();
+            if (getCartOwner() !== owner) throw new Error('Tài khoản đã thay đổi. Vui lòng tải lại giỏ');
+            return cart;
         }
 
         // Nếu là khách vãng lai: Lấy từ LocalStorage
@@ -57,7 +57,7 @@ export const cartService = {
     // 2. THÊM VÀO GIỎ
     addToCart: async (itemData: any, isLoggedIn: boolean) => {
         if (isLoggedIn) {
-            const res = await authenticatedFetch(`${API_BASE}/cart/items`, {
+            const res = await authenticatedFetch(`${ACCOUNT_CART_API}/items`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(itemData),
@@ -66,7 +66,9 @@ export const cartService = {
                 const errData = await res.json().catch(() => ({}));
                 throw new Error(errData.message || 'Thêm vào giỏ thất bại');
             }
-            return res.json();
+            const result = await res.json();
+            notifyCartUpdated();
+            return result;
         }
 
         const unitPrice = Number(itemData.unitPrice || itemData.price || 0);
@@ -110,13 +112,14 @@ export const cartService = {
         }
 
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
+        notifyCartUpdated();
         return { success: true };
     },
 
     // 3. CẬP NHẬT SỐ LƯỢNG
     updateQuantity: async (itemId: string, quantity: number, isLoggedIn: boolean) => {
         if (isLoggedIn) {
-            const res = await authenticatedFetch(`${API_BASE}/cart/items/${itemId}`, {
+            const res = await authenticatedFetch(`${ACCOUNT_CART_API}/items/${itemId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ quantity }),
@@ -125,7 +128,9 @@ export const cartService = {
                 const errData = await res.json().catch(() => ({}));
                 throw new Error(errData.message || 'Cập nhật thất bại');
             }
-            return res.json();
+            const result = await res.json();
+            notifyCartUpdated();
+            return result;
         }
 
         const localData = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -154,29 +159,33 @@ export const cartService = {
             );
         }
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
+        notifyCartUpdated();
     },
 
     // 4. XÓA MÓN
     removeItem: async (itemId: string, isLoggedIn: boolean) => {
         if (isLoggedIn) {
-            const res = await authenticatedFetch(`${API_BASE}/cart/items/${itemId}`, {
+            const res = await authenticatedFetch(`${ACCOUNT_CART_API}/items/${itemId}`, {
                 method: 'DELETE',
             });
             if (!res.ok) throw new Error('Xóa thất bại');
-            return res.json();
+            const result = await res.json();
+            notifyCartUpdated();
+            return result;
         }
 
         const localData = localStorage.getItem(LOCAL_STORAGE_KEY);
         if (!localData) return;
         const items = JSON.parse(localData).filter((i: any) => i.id !== itemId);
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
+        notifyCartUpdated();
     },
 
     // 5. CẬP NHẬT GHI CHÚ
     updateNote: async (itemId: string, note: string, isLoggedIn: boolean) => {
         if (isLoggedIn) {
             try {
-                await authenticatedFetch(`${API_BASE}/cart/items/${itemId}`, {
+                await authenticatedFetch(`${ACCOUNT_CART_API}/items/${itemId}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ note }),

@@ -4,13 +4,14 @@ import { BadRequestException } from '@nestjs/common';
 import { DrinkSize, PrismaClient } from '@prisma/client';
 import { describe, expect, it } from 'vitest';
 import { CartsService } from '../src/carts/carts.service.js';
+import { RewardsCartService } from '../src/rewards/rewards-cart.service.js';
 import { PromotionsService } from '../src/promotions/promotions.service.js';
 import type { PrismaService } from '../src/prisma/prisma.service.js';
 import { recipeFixture } from './inventory-fixture.js';
 import { InventoryService } from '../src/inventory/inventory.service.js';
 
 describe('Giỏ hàng và khuyến mãi với PostgreSQL', () => {
-  it('gộp bằng service giỏ gốc, lưu lựa chọn và tính lại mã theo giỏ', async () => {
+  it('gộp qua lớp tương thích, lưu lựa chọn và tính lại mã theo giỏ', async () => {
     const prisma = new PrismaClient();
     const rollback = new Error('Rollback dữ liệu kiểm thử');
     const prefix = randomUUID().slice(0, 8).toUpperCase();
@@ -56,7 +57,7 @@ describe('Giỏ hàng và khuyến mãi với PostgreSQL', () => {
             $transaction: async (work: (client: typeof tx) => unknown) =>
               work(tx),
           } as unknown as PrismaService;
-          const carts = new CartsService(database);
+          const carts = new RewardsCartService(database, new CartsService(database), new PromotionsService(database));
           const promos = new PromotionsService(database);
           const input = {
             productId: product.id,
@@ -78,7 +79,7 @@ describe('Giỏ hàng và khuyến mãi với PostgreSQL', () => {
           await carts.updateQuantity(user.id, rowId, undefined, undefined, true);
           expect((await carts.getCart(user.id)).totalAmount).toBe(100000);
 
-          await carts.syncCart(user.id, [{ ...input, quantity: 1 }]);
+          await carts.syncCart(user.id, { syncId: randomUUID(), items: [{ ...input, quantity: 1 }] });
           cart = await carts.getCart(user.id);
           expect(cart.items[0].quantity).toBe(3);
 

@@ -44,8 +44,9 @@ export const promotionService = {
       typeof localStorage !== "undefined" &&
       Boolean(localStorage.getItem(TOKEN_KEY)) &&
       items.every((item) => item.id);
+    // Giỏ gốc giữ nguyên; lớp rewards xác định món thưởng từ database.
     const response = await (persisted ? authenticatedFetch : fetch)(
-      `${API_URL}/${persisted ? "cart/quote" : "promotions/quote"}`,
+      `${API_URL}/${persisted ? "rewards/cart/quote" : "promotions/quote"}`,
       {
         method: "POST",
         signal,
