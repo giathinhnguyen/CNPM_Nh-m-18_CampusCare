@@ -61,7 +61,9 @@ Chạy migration và seed:
 
 ```powershell
 docker compose run --rm api pnpm exec prisma migrate deploy
+docker compose run --rm api pnpm exec prisma generate
 docker compose run --rm api pnpm exec prisma db seed
+docker compose run --rm api pnpm exec tsx prisma/seed-promotions.ts
 ```
 
 Khởi động API và frontend:
@@ -76,6 +78,8 @@ docker compose up -d --build api web
 - API health: http://localhost:3000/api/health
 - Danh mục: http://localhost:3000/api/categories
 - Sản phẩm: http://localhost:3000/api/products
+- Khuyến mãi: http://localhost:5173/promotions
+- API khuyến mãi: http://localhost:3000/api/promotions
 - Rewards: http://localhost:3000/api/rewards/products
 
 Xem log:
@@ -113,7 +117,9 @@ Migration và seed một lần:
 
 ```powershell
 pnpm.cmd --filter api exec prisma migrate deploy
+pnpm.cmd --filter api exec prisma generate
 pnpm.cmd --filter api exec prisma db seed
+pnpm.cmd --filter api exec tsx prisma/seed-promotions.ts
 ```
 
 Terminal 1 – API:

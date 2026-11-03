@@ -1,14 +1,28 @@
-import { ArrowLeft, Check, CheckCircle2, Package, Plus, ShieldCheck } from "lucide-react"
+import { ArrowLeft, Check, CheckCircle2, Package, Plus, ShieldCheck, X } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { catalogService } from "../services/catalogService"
+import { cartService } from "../services/cartService"
+import { useAuth } from "../contexts/AuthContext"
 import type { Product, Topping } from "../types"
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("vi-VN").format(value) + " đ"
 
+// Hàm chuyển đổi nhãn phần trăm sang enum Database (Prisma DrinkLevel)
+const mapLevelToEnum = (level: string): 'ZERO' | 'FIFTY' | 'HUNDRED' | 'ONE_TWENTY' => {
+  switch (level) {
+    case '120%': return 'ONE_TWENTY';
+    case '100%': return 'HUNDRED';
+    case '50%': return 'FIFTY';
+    case '0%': return 'ZERO';
+    default: return 'HUNDRED';
+  }
+}
+
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>()
+  const { user } = useAuth()
   const [product, setProduct] = useState<Product | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -18,6 +32,20 @@ export default function ProductPage() {
   const [sweetness, setSweetness] = useState("100%")
   const [ice, setIce] = useState("100%")
   const [quantity, setQuantity] = useState(1)
+
+  // State cho quá trình bấm nút thêm vào giỏ
+  const [adding, setAdding] = useState(false)
+  const [addSuccess, setAddSuccess] = useState(false)
+  const [toast, setToast] = useState<{ message: string; type?: "success" | "info" | "error" } | null>(null)
+  const toastTimeoutRef = useRef<number | null>(null)
+
+  const showToast = (message: string, type: "success" | "info" | "error" = "success") => {
+    if (toastTimeoutRef.current) window.clearTimeout(toastTimeoutRef.current)
+    setToast({ message, type })
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToast(null)
+    }, 3200)
+  }
 
   useEffect(() => {
     if (!id) return
@@ -64,6 +92,7 @@ export default function ProductPage() {
     .filter((topping) => selectedToppings.includes(topping.id))
     .reduce((total, topping) => total + topping.price, 0)
   const total = (price + toppingTotal) * quantity
+
   const toggleTopping = (id: string) => {
     setSelectedToppings((current) =>
       current.includes(id)
@@ -73,6 +102,53 @@ export default function ProductPage() {
           : current,
     )
   }
+
+  // 2. Hàm xử lý khi bấm nút "Thêm vào giỏ"
+  const handleAddToCart = async () => {
+    if (!product || !selected?.id) return
+    try {
+      setAdding(true)
+
+      // Kiểm tra tổng số lượng đã có trong giỏ hàng
+      const cartData = await cartService.getCart(Boolean(user))
+      const inCart = (cartData.items || [])
+        .filter((item: any) => item.productId === product.id)
+        .reduce((sum: number, item: any) => sum + item.quantity, 0)
+
+      if (quantity + inCart > product.stockQuantity) {
+        showToast(
+          `Hiện số lượng tối đa của món ${product.name} là ${product.stockQuantity} ly (tính cả các lựa chọn đã có trong giỏ).`,
+          "error",
+        )
+        return
+      }
+
+      await cartService.addToCart({
+        productId: product.id,
+        productName: product.name,
+        imageUrl: product.imageUrl,
+        size: selected.size,
+        productSizeId: selected.id,
+        sweetnessLevel: mapLevelToEnum(sweetness),
+        iceLevel: mapLevelToEnum(ice),
+        quantity,
+        unitPrice: price + toppingTotal,
+        stockQuantity: product.stockQuantity,
+        toppingIds: selectedToppings,
+        toppings: toppings.filter(t => selectedToppings.includes(t.id)), // 👈 Bổ sung tên topping
+      }, !!user)
+
+      setAddSuccess(true)
+      showToast(`Đã thêm ${quantity} ly ${product.name} vào giỏ hàng`, "success")
+      setTimeout(() => setAddSuccess(false), 2000)
+    } catch (err: any) {
+      showToast(err.message || "Thêm vào giỏ hàng thất bại", "error")
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  const isOutOfStock = product.stockQuantity <= 0
 
   return (
     <main className="mx-auto max-w-7xl px-5 pb-20 pt-16 sm:px-8 lg:px-10">
@@ -97,7 +173,7 @@ export default function ProductPage() {
 
           <div className="mt-7 flex items-center gap-3 border-b border-[#e5dbd1] pb-7 text-sm text-[#637a64]">
             <ShieldCheck size={20} />
-            {product.stockQuantity > 0 ? `Còn ${product.stockQuantity} phần hôm nay` : "Tạm hết hàng"}
+            {!isOutOfStock ? `Còn ${product.stockQuantity} phần hôm nay` : <span className="font-bold text-red-600">Tạm hết hàng</span>}
           </div>
 
           <div className="mt-7">
@@ -133,15 +209,46 @@ export default function ProductPage() {
             </div>
           </div>
 
-          <OptionGroup title="Độ ngọt" options={["120%", "100%", "70%", "50%", "0%"]} value={sweetness} onChange={setSweetness} />
-          <OptionGroup title="Mức đá" options={["120%", "100%", "70%", "50%", "0%"]} value={ice} onChange={setIce} />
+          <OptionGroup title="Độ ngọt" options={["120%", "100%", "50%", "0%"]} value={sweetness} onChange={setSweetness} />
+          <OptionGroup title="Mức đá" options={["120%", "100%", "50%", "0%"]} value={ice} onChange={setIce} />
 
           <div className="mt-9 flex items-center justify-between gap-5">
             <h2 className="font-serif text-2xl text-[#3b2a22]">Số lượng</h2>
             <div className="flex items-center gap-7 rounded-full border border-[#e0d4c9] bg-white px-5 py-3">
               <button type="button" aria-label="Giảm số lượng" onClick={() => setQuantity((value) => Math.max(1, value - 1))} className="text-2xl text-[#8d796d]">−</button>
               <span className="min-w-4 text-center font-bold text-[#3b2a22]">{quantity}</span>
-              <button type="button" aria-label="Tăng số lượng" onClick={() => setQuantity((value) => value + 1)} className="text-2xl text-[#3b2a22]">+</button>
+              <button
+                type="button"
+                aria-label="Tăng số lượng"
+                onClick={async () => {
+                  try {
+                    const cartData = await cartService.getCart(Boolean(user))
+                    const inCart = (cartData.items || [])
+                      .filter((item: any) => item.productId === product.id)
+                      .reduce((sum: number, item: any) => sum + item.quantity, 0)
+                    if (quantity + inCart >= product.stockQuantity) {
+                      showToast(
+                        `Hiện số lượng tối đa của món ${product.name} là ${product.stockQuantity} ly (tính cả các lựa chọn đã có trong giỏ).`,
+                        "error",
+                      )
+                      return
+                    }
+                    setQuantity((value) => value + 1)
+                  } catch {
+                    if (quantity >= product.stockQuantity) {
+                      showToast(
+                        `Hiện số lượng tối đa của món ${product.name} là ${product.stockQuantity} ly (tính cả các lựa chọn đã có trong giỏ).`,
+                        "error",
+                      )
+                      return
+                    }
+                    setQuantity((value) => value + 1)
+                  }
+                }}
+                className="text-2xl text-[#3b2a22]"
+              >
+                +
+              </button>
             </div>
           </div>
 
@@ -150,8 +257,28 @@ export default function ProductPage() {
               <p className="text-sm text-[#89766a]">Tổng cộng</p>
               <p className="mt-1 font-serif text-3xl font-semibold text-[#3b2a22]">{formatCurrency(total)}</p>
             </div>
-            <button type="button" disabled title="Giỏ hàng đang được phát triển" className="inline-flex min-h-16 cursor-not-allowed items-center gap-2 rounded-full bg-[#3b241c] px-7 text-base font-bold text-white opacity-60 shadow-[0_10px_25px_rgba(59,36,28,0.18)]">
-              <Plus size={22} /> Thêm vào giỏ
+
+            {/* 3. NÚT THÊM VÀO GIỎ ĐÃ ĐƯỢC MỞ KHÓA VÀ NỐI HÀM ONCLICK */}
+            <button
+              type="button"
+              disabled={isOutOfStock || adding}
+              onClick={handleAddToCart}
+              className={`inline-flex min-h-16 items-center gap-2 rounded-full px-8 text-base font-bold text-white shadow-[0_10px_25px_rgba(59,36,28,0.18)] transition-all ${isOutOfStock
+                ? "bg-gray-400 cursor-not-allowed opacity-60"
+                : addSuccess
+                  ? "bg-green-700 hover:bg-green-800 scale-105"
+                  : "bg-[#3b241c] hover:bg-[#523428] active:scale-95"
+                }`}
+            >
+              {addSuccess ? (
+                <>
+                  <Check size={22} /> Đã thêm vào giỏ!
+                </>
+              ) : (
+                <>
+                  <Plus size={22} /> {adding ? "Đang thêm..." : isOutOfStock ? "Tạm hết hàng" : "Thêm vào giỏ"}
+                </>
+              )}
             </button>
           </div>
 
@@ -161,6 +288,29 @@ export default function ProductPage() {
           </div>
         </div>
       </section>
+
+      {/* TOAST THÔNG BÁO */}
+      {toast && (
+        <div
+          className="fixed right-4 top-20 z-50 flex max-w-sm items-start gap-2.5 rounded-2xl border p-3.5 text-left text-xs font-medium leading-5 shadow-xl backdrop-blur transition-all"
+          style={{
+            borderColor: toast.type === "error" ? "#efc3bd" : toast.type === "info" ? "#ddd2c8" : "#b9d0b9",
+            backgroundColor: toast.type === "error" ? "rgba(255, 242, 240, 0.95)" : toast.type === "info" ? "rgba(255, 255, 255, 0.95)" : "rgba(237, 245, 236, 0.95)",
+            color: toast.type === "error" ? "#8c382e" : toast.type === "info" ? "#49372e" : "#31583b",
+          }}
+          role="status"
+        >
+          <span className="min-w-0 flex-1 break-words">{toast.message}</span>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="mt-0.5 shrink-0 opacity-70 hover:opacity-100"
+            aria-label="Đóng thông báo"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
     </main>
   )
 }

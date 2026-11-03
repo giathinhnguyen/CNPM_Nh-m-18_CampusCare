@@ -27,4 +27,19 @@ export interface Topping {
 
 export type DrinkLevel = "ZERO" | "FIFTY" | "HUNDRED" | "ONE_TWENTY";
 
+export interface Promotion {
+  id: string;
+  code: string;
+  title: string | null;
+  description: string | null;
+  discountType: "PERCENTAGE" | "FIXED";
+  discountValue: number;
+  minOrderAmount: number;
+  maxDiscountAmount: number | null;
+  startDate: string | null;
+  endDate: string | null;
+  appliesToAllProducts: boolean;
+  products: { product: { id: string; name: string } }[];
+}
+
 export type OrderStatus = "PENDING_PAYMENT" | "PAID" | "CANCELLED" | "EXPIRED";
