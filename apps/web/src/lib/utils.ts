@@ -49,6 +49,7 @@ export const getCartSubtotal = (
 // Nhãn trạng thái đơn hàng theo Prisma
 export const statusLabels: Record<OrderStatus, string> = {
   PENDING_PAYMENT: "Chờ thanh toán",
+  PAYMENT_FAILED: "Thanh toán thất bại",
   PAID: "Đã thanh toán",
   CANCELLED: "Đã hủy",
   EXPIRED: "Hết hạn thanh toán",

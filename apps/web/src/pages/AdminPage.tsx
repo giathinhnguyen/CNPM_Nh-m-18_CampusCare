@@ -56,6 +56,7 @@ const inputClass =
   "w-full rounded-xl border border-[#ded3c8] bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#a98f7d]";
 const statusNames: Record<string, string> = {
   PENDING_PAYMENT: "Chờ thanh toán",
+  PAYMENT_FAILED: "Thanh toán thất bại",
   PAID: "Đã thanh toán",
   CANCELLED: "Đã hủy",
   EXPIRED: "Hết hạn",

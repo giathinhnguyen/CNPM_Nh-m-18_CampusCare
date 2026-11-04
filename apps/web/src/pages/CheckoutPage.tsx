@@ -5,7 +5,6 @@ import {
   CreditCard,
   LoaderCircle,
   LockKeyhole,
-  Smartphone,
   Landmark,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -35,14 +34,13 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const [items, setItems] = useState<CheckoutItem[]>([]);
   const [quote, setQuote] = useState<CartQuote | null>(null);
-  const [method, setMethod] = useState("wallet");
+  const [method, setMethod] = useState("card");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [phoneError, setPhoneError] = useState("");
   const [configured, setConfigured] = useState(false);
   const [bankDemo, setBankDemo] = useState(false);
-  const [cardDemo, setCardDemo] = useState(false);
   const requestKey = useRef(crypto.randomUUID());
   const submitting = useRef(false);
   const [uncertain, setUncertain] = useState(false);
@@ -73,13 +71,10 @@ export default function CheckoutPage() {
         if (!active) return;
         setConfigured(config.configured);
         setBankDemo(config.bankTransferDemoEnabled);
-        setCardDemo(config.cardDemoEnabled);
         setMethod(
           config.bankTransferDemoEnabled
             ? "bank-demo"
-            : config.cardDemoEnabled
-              ? "card-demo"
-              : "wallet",
+            : "card",
         );
         setItems(selected);
         if (selected.length)
@@ -153,7 +148,7 @@ export default function CheckoutPage() {
         navigate(`/orders/${order.id}`, { replace: true });
         return;
       }
-      if (method === "bank-demo" || method === "card-demo") {
+      if (method === "bank-demo") {
         navigate(`/orders/${order.id}?method=${method}`, { replace: true });
         return;
       }
@@ -286,16 +281,6 @@ export default function CheckoutPage() {
             </h2>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               {[
-                ...(cardDemo
-                  ? [
-                      {
-                        id: "card-demo",
-                        title: "Thẻ ngân hàng (demo)",
-                        detail: "Nhập thông tin thẻ test",
-                        icon: CreditCard,
-                      },
-                    ]
-                  : []),
                 ...(bankDemo
                   ? [
                       {
@@ -307,12 +292,6 @@ export default function CheckoutPage() {
                     ]
                   : []),
                 {
-                  id: "wallet",
-                  title: "Ví điện tử / QR",
-                  detail: "VNPay QR và ứng dụng ngân hàng",
-                  icon: Smartphone,
-                },
-                {
                   id: "card",
                   title: "Thẻ ngân hàng",
                   detail: "Thẻ nội địa qua VNPay",
@@ -321,7 +300,7 @@ export default function CheckoutPage() {
               ]
                 .filter(
                   (option) =>
-                    ["bank-demo", "card-demo"].includes(option.id) ||
+                    option.id === "bank-demo" ||
                     configured,
                 )
                 .map((option) => (
@@ -356,11 +335,9 @@ export default function CheckoutPage() {
             <p className="mt-4 text-sm leading-6 text-[#837167]">
               {method === "bank-demo"
                 ? "QR được tạo theo đúng số tiền và mã đơn. Bản đồ án vẫn cho phép tự xác nhận để demo mà không cần chuyển tiền thật."
-                : method === "card-demo"
-                  ? "Nhập thông tin thẻ mẫu ở bước tiếp theo. Chỉ dùng dữ liệu test; không có tiền thật bị trừ."
-                  : "Bạn sẽ nhập thông tin thanh toán tại VNPay. Đây là môi trường sandbox, dùng để kiểm thử."}
+                : "Bạn sẽ nhập thông tin thẻ nội địa tại VNPay. Đây là môi trường sandbox, dùng để kiểm thử."}
             </p>
-            {!configured && !bankDemo && !cardDemo && (
+            {!configured && !bankDemo && (
               <p className="mt-3 text-sm text-amber-800">
                 Thanh toán VNPay chưa sẵn sàng. Vui lòng liên hệ quán hoặc quay
                 lại sau.
@@ -449,9 +426,7 @@ export default function CheckoutPage() {
                 (!quote ||
                   (!(method === "bank-demo"
                     ? bankDemo
-                    : method === "card-demo"
-                      ? cardDemo
-                      : configured) &&
+                    : configured) &&
                     quote.finalAmount > 0)))
             }
           >

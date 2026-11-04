@@ -43,6 +43,7 @@ export class VnpayGateway {
     );
   }
   verify(input: Record<string, unknown>): Record<string, string> | null {
+    if (typeof input.vnp_SecureHash !== 'string') return null;
     const params: Record<string, string> = {};
     for (const [key, value] of Object.entries(input)) {
       if (!key.startsWith('vnp_') || typeof value !== 'string') return null;
@@ -50,7 +51,7 @@ export class VnpayGateway {
         params[key] = value;
     }
     return params.vnp_TmnCode === this.config().merchant &&
-      this.matches(queryString(params), String(input.vnp_SecureHash ?? ''))
+      this.matches(queryString(params), input.vnp_SecureHash)
       ? params
       : null;
   }
@@ -82,6 +83,7 @@ export class VnpayGateway {
         process.env.VNPAY_RETURN_URL || 'http://localhost:5173/payments/return',
     };
     if (channel === 'card') params.vnp_BankCode = 'VNBANK';
+    if (channel === 'wallet') params.vnp_BankCode = 'VNPAYQR';
     const query = queryString(params);
     return `https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?${query}&vnp_SecureHash=${this.sign(query)}`;
   }

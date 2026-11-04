@@ -273,7 +273,7 @@ export class OrdersService {
     });
     if (order.status === 'PAID') return;
     if (
-      order.status !== 'PENDING_PAYMENT' ||
+      !['PENDING_PAYMENT', 'PAYMENT_FAILED'].includes(order.status) ||
       order.inventoryStatus !== 'RESERVED'
     )
       throw new ConflictException('Đơn cần đối soát trước khi xác nhận');

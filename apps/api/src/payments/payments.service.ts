@@ -46,7 +46,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       configured: this.gateway.configured(),
       bankTransferDemoEnabled: this.bankTransferDemoEnabled(),
       bankQrConfigured: Boolean(bankQrReceiver()),
-      cardDemoEnabled: this.cardDemoEnabled(),
+      cardDemoEnabled: false,
     };
   }
   private bankTransferDemoEnabled() {
@@ -77,6 +77,48 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
 
   async confirmBankTransferDemo(userId: string, orderId: string) {
     return this.confirmDemo(userId, orderId, 'BANK_TRANSFER');
+  }
+  async failBankTransferDemo(userId: string, orderId: string, body: unknown) {
+    if (!this.bankTransferDemoEnabled())
+      throw new ForbiddenException('Thanh toán mô phỏng chưa được bật.');
+    const input = validateObject(body, ['idempotencyKey']);
+    if (!isUuid(orderId) || !isUuid(input.idempotencyKey))
+      throw new BadRequestException('Mã yêu cầu không hợp lệ');
+    const key = `bank-failure:${userId}:${input.idempotencyKey.toLowerCase()}`;
+    return this.prisma.$transaction(async tx => {
+      await lockCustomer(tx, userId);
+      const order = await this.orders.owned(userId, orderId, tx);
+      const previous = await tx.payment.findUnique({ where: { idempotencyKey: key } });
+      if (previous) {
+        if (previous.orderId !== order.id) throw new ConflictException('Mã yêu cầu đã dùng cho đơn khác');
+        return order;
+      }
+      if (!['PENDING_PAYMENT', 'PAYMENT_FAILED'].includes(order.status) ||
+          order.inventoryStatus !== 'RESERVED' || order.reservationExpiresAt <= new Date())
+        throw new ConflictException('Đơn không còn trong thời gian thanh toán');
+      if (order.payments.some(p => p.status !== 'FAILED' || p.needsReview))
+        throw new ConflictException('Giao dịch cần đối soát, không thể mô phỏng thất bại');
+      if (order.status === 'PAYMENT_FAILED') return order;
+      await tx.payment.create({ data: { orderId: order.id, idempotencyKey: key,
+        paymentMethod: 'BANK_TRANSFER', amount: order.finalAmount, status: 'FAILED',
+        rawResponse: { simulated: true, source: 'customer-demo-failure', confirmedBy: userId } } });
+      await tx.order.update({ where: { id: order.id }, data: { status: 'PAYMENT_FAILED' } });
+      return this.orders.owned(userId, order.id, tx);
+    });
+  }
+
+  async retry(userId: string, orderId: string) {
+    return this.prisma.$transaction(async tx => {
+      await lockCustomer(tx, userId);
+      const order = await this.orders.owned(userId, orderId, tx);
+      if (!['PENDING_PAYMENT', 'PAYMENT_FAILED'].includes(order.status) ||
+          order.inventoryStatus !== 'RESERVED' || order.reservationExpiresAt <= new Date())
+        throw new ConflictException('Đơn đã hết hạn hoặc không thể thanh toán lại');
+      if (order.payments.some(p => p.status !== 'FAILED' || p.needsReview))
+        throw new ConflictException('Giao dịch cần đối soát trước khi thử lại');
+      await tx.order.update({ where: { id: order.id }, data: { status: 'PENDING_PAYMENT' } });
+      return this.orders.owned(userId, order.id, tx);
+    });
   }
   async confirmCardDemo(userId: string, orderId: string) {
     return this.confirmDemo(userId, orderId, 'CARD_DEMO');
@@ -161,7 +203,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     if (
       !isUuid(input.orderId) ||
       !isUuid(input.idempotencyKey) ||
-      !['wallet', 'card'].includes(String(input.channel))
+      input.channel !== 'card'
     )
       throw new BadRequestException('Yêu cầu thanh toán không hợp lệ');
     const orderId = input.orderId.toLowerCase();
@@ -232,6 +274,45 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  async publicReturn(body: unknown) {
+    if (!body || typeof body !== 'object' || Array.isArray(body))
+      throw new BadRequestException('Kết quả VNPay không hợp lệ');
+    const params = this.gateway.verify(body as Record<string, unknown>);
+    if (!params || !isUuid(params.vnp_TxnRef))
+      throw new BadRequestException('Chữ ký hoặc mã giao dịch VNPay không hợp lệ');
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: params.vnp_TxnRef }, include: { order: true },
+    });
+    if (!payment || payment.paymentMethod !== 'VNPAY')
+      throw new NotFoundException('Không tìm thấy giao dịch VNPay');
+    const order = await this.handleReturn(payment.order.userId, body);
+    const current = order.payments.find(p => p.id === payment.id)!;
+    // Signed receipt only. Personal details remain behind the owned-order API.
+    return { orderId: order.id, status: order.status,
+      paymentStatus: current.status, needsReview: current.needsReview };
+  }
+
+  async handleReturn(userId: string, body: unknown) {
+    if (!body || typeof body !== 'object' || Array.isArray(body))
+      throw new BadRequestException('Kết quả VNPay không hợp lệ');
+    const params = this.gateway.verify(body as Record<string, unknown>);
+    if (!params) throw new BadRequestException('Chữ ký VNPay không hợp lệ');
+    const order = await this.orderForPayment(userId, params.vnp_TxnRef);
+    // The browser is only a carrier: verify the merchant signature first, then
+    // use the same amount/reference/idempotency checks as the IPN handler.
+    const success = params.vnp_ResponseCode === '00' && params.vnp_TransactionStatus === '00';
+    const cancelled = params.vnp_ResponseCode === '24' &&
+      (!params.vnp_TransactionStatus || params.vnp_TransactionStatus === '02');
+    if (success || cancelled) {
+      const result = await this.applyVerified(cancelled
+        ? { ...params, vnp_TransactionStatus: '02' } : params);
+      if (!['00', '02'].includes(result.RspCode))
+        throw new BadRequestException('Kết quả VNPay không khớp giao dịch');
+      return this.orders.owned(userId, order.id);
+    }
+    return this.reconcile(userId, order.id);
+  }
+
   async notification(query: Record<string, unknown>) {
     const params = this.gateway.verify(query);
     if (!params) return { RspCode: '97', Message: 'Invalid signature' };
@@ -268,7 +349,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
           return { RspCode: '02', Message: 'Already processed' };
         if (success) {
           const late =
-            order.status !== 'PENDING_PAYMENT' ||
+            !['PENDING_PAYMENT', 'PAYMENT_FAILED'].includes(order.status) ||
             order.inventoryStatus !== 'RESERVED';
           await tx.payment.update({
             where: { id: payment.id },
@@ -288,6 +369,8 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
               rawResponse: params as Prisma.InputJsonValue,
             },
           });
+          if (order.status === 'PENDING_PAYMENT' && order.inventoryStatus === 'RESERVED')
+            await tx.order.update({ where: { id: order.id }, data: { status: 'PAYMENT_FAILED' } });
         }
         return { RspCode: '00', Message: 'Confirmed' };
       },
@@ -323,7 +406,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     try {
       const orders = await this.prisma.order.findMany({
         where: {
-          status: 'PENDING_PAYMENT',
+          status: { in: ['PENDING_PAYMENT', 'PAYMENT_FAILED'] },
           reservationExpiresAt: { lt: new Date() },
         },
         take: 50,

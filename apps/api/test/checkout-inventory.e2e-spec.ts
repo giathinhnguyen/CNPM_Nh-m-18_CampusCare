@@ -220,13 +220,14 @@ describe('Checkout, shared ingredients and verified VNPay', () => {
     const paymentInput = {
       orderId: a.id,
       idempotencyKey: randomUUID(),
-      channel: 'wallet',
+      channel: 'card',
     };
     const [p, q] = await Promise.all([
       payments.create(f.user.id, paymentInput, '127.0.0.1'),
       payments.create(f.user.id, paymentInput, '127.0.0.1'),
     ]);
     expect(p.id).toBe(q.id);
+    expect(new URL(p.paymentUrl!).searchParams.get('vnp_BankCode')).toBe('VNBANK');
     expect(
       (
         await payments.notification({
@@ -258,6 +259,140 @@ describe('Checkout, shared ingredients and verified VNPay', () => {
         where: { orderId: a.id, type: 'EARN' },
       }),
     ).toBe(1);
+  });
+
+  it('verified successful return settles once without IPN or QueryDR, including duplicate return and IPN', async () => {
+    const f = await fixture();
+    const order = await orders.create(f.user.id, body((await cart(f)).id));
+    const payment = await payments.create(f.user.id,
+      { orderId: order.id, idempotencyKey: randomUUID(), channel: 'card' }, '127.0.0.1');
+    const query = vi.spyOn(gateway, 'query').mockRejectedValue(new Error('QueryDR unavailable'));
+    try {
+      await expect(payments.handleReturn(f.user.id, { ...callback(payment.id), vnp_SecureHash: 'bad' })).rejects.toThrow();
+      await expect(payments.handleReturn((await customer()).id, callback(payment.id))).rejects.toThrow();
+      await expect(payments.handleReturn(f.user.id, callback(payment.id, '100'))).rejects.toThrow();
+      expect((await orders.owned(f.user.id, order.id)).status).toBe('PENDING_PAYMENT');
+      const signed = callback(payment.id);
+      const paid = await payments.handleReturn(f.user.id, signed);
+      expect(paid.status).toBe('PAID');
+      await Promise.all([payments.handleReturn(f.user.id, signed), payments.notification(signed)]);
+      expect(query).not.toHaveBeenCalled();
+      expect(await prisma.loyaltyTransaction.count({where:{orderId:order.id,type:'EARN'}})).toBe(1);
+      const stock = await prisma.ingredientStock.findUniqueOrThrow({where:{ingredientId:f.ingredient.id}});
+      expect(stock.onHand.toNumber()).toBe(180);
+      expect(stock.reserved.toNumber()).toBe(0);
+    } finally { query.mockRestore(); }
+  });
+
+  it('bank demo failure is idempotent, retries without reserving twice, and success earns only once', async () => {
+    const oldFlag = process.env.BANK_TRANSFER_DEMO_ENABLED;
+    process.env.BANK_TRANSFER_DEMO_ENABLED = 'true';
+    try {
+      const f = await fixture();
+      const order = await orders.create(f.user.id, body((await cart(f)).id));
+      const request = { idempotencyKey: randomUUID() };
+      await expect(payments.failBankTransferDemo((await customer()).id, order.id, request)).rejects.toThrow();
+      const results = await Promise.all([
+        payments.failBankTransferDemo(f.user.id, order.id, request),
+        payments.failBankTransferDemo(f.user.id, order.id, request),
+      ]);
+      expect(results[0].status).toBe('PAYMENT_FAILED');
+      expect(await prisma.payment.count({where:{orderId:order.id,status:'FAILED'}})).toBe(1);
+      expect(await prisma.loyaltyTransaction.count({where:{orderId:order.id}})).toBe(0);
+      let stock = await prisma.ingredientStock.findUniqueOrThrow({where:{ingredientId:f.ingredient.id}});
+      expect(stock.onHand.toNumber()).toBe(200);
+      expect(stock.reserved.toNumber()).toBe(20);
+      await expect(payments.confirmBankTransferDemo(f.user.id, order.id)).rejects.toThrow();
+      const retry = await payments.retry(f.user.id, order.id);
+      expect(retry.status).toBe('PENDING_PAYMENT');
+      expect(retry.reservationExpiresAt).toEqual(order.reservationExpiresAt);
+      expect((await payments.failBankTransferDemo(f.user.id, order.id, request)).status).toBe('PENDING_PAYMENT');
+      const paid = await payments.confirmBankTransferDemo(f.user.id, order.id);
+      expect(paid.status).toBe('PAID');
+      await payments.confirmBankTransferDemo(f.user.id, order.id);
+      await expect(payments.failBankTransferDemo(f.user.id, order.id, {idempotencyKey:randomUUID()})).rejects.toThrow();
+      expect(await prisma.loyaltyTransaction.count({where:{orderId:order.id,type:'EARN'}})).toBe(1);
+      stock = await prisma.ingredientStock.findUniqueOrThrow({where:{ingredientId:f.ingredient.id}});
+      expect(stock.onHand.toNumber()).toBe(180);
+      expect(stock.reserved.toNumber()).toBe(0);
+    } finally {
+      if (oldFlag === undefined) delete process.env.BANK_TRANSFER_DEMO_ENABLED;
+      else process.env.BANK_TRANSFER_DEMO_ENABLED = oldFlag;
+    }
+  });
+
+  it('failed bank orders can cancel or expire; pending VNPay and production cannot be failed manually', async () => {
+    const oldFlag = process.env.BANK_TRANSFER_DEMO_ENABLED;
+    const oldEnv = process.env.NODE_ENV;
+    process.env.BANK_TRANSFER_DEMO_ENABLED = 'true';
+    try {
+      const f = await fixture();
+      const order = await orders.create(f.user.id, body((await cart(f)).id));
+      process.env.NODE_ENV = 'production';
+      await expect(payments.failBankTransferDemo(f.user.id, order.id, {idempotencyKey:randomUUID()})).rejects.toThrow();
+      process.env.NODE_ENV = 'test';
+      await payments.failBankTransferDemo(f.user.id, order.id, {idempotencyKey:randomUUID()});
+      await prisma.order.update({where:{id:order.id},data:{createdAt:new Date(Date.now()-60000),reservationExpiresAt:new Date(Date.now()-1000)}});
+      await expect(payments.retry(f.user.id, order.id)).rejects.toThrow();
+      expect((await payments.reconcile(f.user.id, order.id)).status).toBe('EXPIRED');
+      expect((await prisma.ingredientStock.findUniqueOrThrow({where:{ingredientId:f.ingredient.id}})).reserved.toNumber()).toBe(0);
+      const next = await orders.create(f.user.id, body((await cart(f)).id));
+      await payments.create(f.user.id,{orderId:next.id,idempotencyKey:randomUUID(),channel:'card'},'127.0.0.1');
+      await expect(payments.failBankTransferDemo(f.user.id,next.id,{idempotencyKey:randomUUID()})).rejects.toThrow('đối soát');
+      await expect(payments.create(f.user.id,{orderId:next.id,idempotencyKey:randomUUID(),channel:'wallet'},'127.0.0.1')).rejects.toThrow();
+    } finally {
+      if (oldFlag === undefined) delete process.env.BANK_TRANSFER_DEMO_ENABLED;
+      else process.env.BANK_TRANSFER_DEMO_ENABLED = oldFlag;
+      if (oldEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = oldEnv;
+    }
+  });
+
+  it('signed return can settle without a login session and only exposes a minimal receipt', async () => {
+    const f = await fixture();
+    const order = await orders.create(f.user.id, body((await cart(f)).id));
+    const payment = await payments.create(f.user.id,
+      { orderId: order.id, idempotencyKey: randomUUID(), channel: 'card' }, '127.0.0.1');
+    await expect(payments.publicReturn({ ...callback(payment.id), vnp_SecureHash: 'bad' })).rejects.toThrow();
+    expect((await orders.owned(f.user.id, order.id)).status).toBe('PENDING_PAYMENT');
+    const signed = callback(payment.id);
+    const result = await payments.publicReturn(signed);
+    expect(result).toEqual({orderId:order.id,status:'PAID',paymentStatus:'SUCCESS',needsReview:false});
+    expect(await payments.publicReturn(signed)).toEqual(result);
+    expect(await prisma.loyaltyTransaction.count({where:{orderId:order.id,type:'EARN'}})).toBe(1);
+  });
+
+  it('signed cancelled return unlocks another payment method without QueryDR, but rejects forged or foreign returns', async () => {
+    const f = await fixture();
+    const order = await orders.create(f.user.id, body((await cart(f)).id));
+    const payment = await payments.create(f.user.id,
+      { orderId: order.id, idempotencyKey: randomUUID(), channel: 'card' }, '127.0.0.1');
+    const cancelled = callback(payment.id, '5000000', '02');
+    const query = vi.spyOn(gateway, 'query').mockRejectedValue(new Error('QueryDR unavailable'));
+    try {
+      await expect(payments.handleReturn(f.user.id, { ...cancelled, vnp_SecureHash: 'bad' })).rejects.toThrow();
+      await expect(payments.handleReturn((await customer()).id, cancelled)).rejects.toThrow();
+      await expect(payments.handleReturn(f.user.id, callback(payment.id, '100', '02'))).rejects.toThrow();
+      expect((await orders.owned(f.user.id, order.id)).payments[0].status).toBe('PENDING');
+      const returned = await payments.handleReturn(f.user.id, cancelled);
+      expect(returned.payments[0].status).toBe('FAILED');
+      expect(returned.status).toBe('PAYMENT_FAILED');
+      await payments.retry(f.user.id, order.id);
+      expect(returned.inventoryStatus).toBe('RESERVED');
+      expect(query).not.toHaveBeenCalled();
+      const oldFlag = process.env.CARD_DEMO_ENABLED;
+      process.env.CARD_DEMO_ENABLED = 'true';
+      try {
+        const paid = await payments.confirmCardDemo(f.user.id, order.id);
+        expect(paid.status).toBe('PAID');
+        const replay = await payments.handleReturn(f.user.id, cancelled);
+        expect(replay.status).toBe('PAID');
+        expect(replay.payments.filter(p => p.status === 'SUCCESS')).toHaveLength(1);
+      } finally {
+        if (oldFlag === undefined) delete process.env.CARD_DEMO_ENABLED;
+        else process.env.CARD_DEMO_ENABLED = oldFlag;
+      }
+    } finally { query.mockRestore(); }
   });
 
   it('unknown payment blocks cancellation; verified failure releases once; late success is flagged for review', async () => {
@@ -371,7 +506,7 @@ describe('Checkout, shared ingredients and verified VNPay', () => {
       vi.stubEnv('BANK_TRANSFER_DEMO_ENABLED', 'true');
       await payments.create(
         f.user.id,
-        { orderId: order.id, idempotencyKey: randomUUID(), channel: 'wallet' },
+        { orderId: order.id, idempotencyKey: randomUUID(), channel: 'card' },
         '127.0.0.1',
       );
       await expect(

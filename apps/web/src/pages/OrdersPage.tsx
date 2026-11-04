@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
-import { CheckCircle2, Clock3, RefreshCw, Landmark } from "lucide-react";
+import { CheckCircle2, Clock3, RefreshCw, Landmark, XCircle } from "lucide-react";
 import {
   Button,
   ButtonLink,
@@ -17,10 +17,10 @@ import {
 import { formatCurrency } from "../lib/utils";
 import { useAuth } from "../contexts/AuthContext";
 import BankQrPanel from "../components/BankQrPanel";
-import DemoCardForm from "../components/DemoCardForm";
 
 const labels = {
   PENDING_PAYMENT: "Chờ thanh toán",
+  PAYMENT_FAILED: "Thanh toán thất bại",
   PAID: "Đã thanh toán",
   CANCELLED: "Đã hủy",
   EXPIRED: "Hết hạn",
@@ -29,7 +29,6 @@ export default function OrdersPage() {
   const { id } = useParams();
   const location = useLocation();
   const { refreshUser } = useAuth();
-  const returning = location.pathname === "/payments/return";
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -37,7 +36,6 @@ export default function OrdersPage() {
   const [filter, setFilter] = useState("ALL");
   const [configured, setConfigured] = useState(false);
   const [bankDemo, setBankDemo] = useState(false);
-  const [cardDemo, setCardDemo] = useState(false);
   const [method, setMethod] = useState("bank-demo");
   const [cancelTarget, setCancelTarget] = useState<string | null>(null);
   useEffect(() => {
@@ -48,33 +46,11 @@ export default function OrdersPage() {
         if (active) setConfigured(config.configured);
         if (active) setBankDemo(config.bankTransferDemoEnabled);
         if (active) {
-          setCardDemo(config.cardDemoEnabled);
-          setMethod(
-            new URLSearchParams(location.search).get("method") ===
-              "card-demo" || !config.bankTransferDemoEnabled
-              ? "card-demo"
-              : "bank-demo",
-          );
+          const requested = new URLSearchParams(location.search).get("method");
+          setMethod(requested === "bank-demo" && config.bankTransferDemoEnabled
+            ? "bank-demo" : config.configured ? "card" : "bank-demo");
         }
-        let data: Order[];
-        if (returning) {
-          const ref = new URLSearchParams(location.search).get("vnp_TxnRef");
-          if (!ref)
-            throw new Error(
-              "Không có mã giao dịch. Vui lòng xem lịch sử đơn hàng.",
-            );
-          const order = await orderService.forPayment(ref);
-          data = [order];
-          try {
-            data = [await orderService.reconcile(order.id)];
-          } catch {
-            if (active)
-              setError(
-                "Chưa nhận được kết quả cuối cùng từ VNPay. Bạn có thể kiểm tra lại trạng thái bên dưới.",
-              );
-          }
-        } else
-          data = id ? [await orderService.get(id)] : await orderService.list();
+        const data = id ? [await orderService.get(id)] : await orderService.list();
         if (active) setOrders(data);
       } catch (cause) {
         if (active)
@@ -88,11 +64,11 @@ export default function OrdersPage() {
     return () => {
       active = false;
     };
-  }, [id, returning, location.search]);
+  }, [id, location.search]);
 
   async function action(
     order: Order,
-    kind: "check" | "pay" | "cancel" | "bank-demo" | "card-demo",
+    kind: "check" | "pay" | "cancel" | "bank-demo" | "fail" | "retry",
   ) {
     if (busy) return;
     setBusy(true);
@@ -102,7 +78,7 @@ export default function OrdersPage() {
         const result = await orderService.pay(
           order.id,
           crypto.randomUUID(),
-          "wallet",
+          "card",
         );
         if (result.paymentUrl) {
           window.location.assign(result.paymentUrl);
@@ -112,8 +88,10 @@ export default function OrdersPage() {
       const updated =
         kind === "bank-demo"
           ? await orderService.confirmBankTransferDemo(order.id)
-          : kind === "card-demo"
-            ? await orderService.confirmCardDemo(order.id)
+          : kind === "fail"
+            ? await orderService.failBankTransferDemo(order.id, crypto.randomUUID())
+            : kind === "retry"
+              ? await orderService.retry(order.id)
             : kind === "cancel"
               ? await orderService.cancel(order.id)
               : await orderService.reconcile(order.id);
@@ -130,8 +108,9 @@ export default function OrdersPage() {
       setCancelTarget(null);
     }
   }
-  const detail = Boolean(id || returning);
+  const detail = Boolean(id);
   const confirmed = detail && orders[0]?.status === "PAID";
+  const failed = detail && orders[0]?.status === "PAYMENT_FAILED";
   return (
     <section
       className={`mx-auto px-4 py-8 sm:px-6 md:py-14 ${detail ? "max-w-3xl" : "max-w-5xl"}`}
@@ -144,6 +123,16 @@ export default function OrdersPage() {
           </h1>
           <p className="mt-3 text-sm text-[#715f54]">
             BrewLite đã nhận đơn và sẽ bắt đầu chuẩn bị ngay.
+          </p>
+        </div>
+      ) : failed ? (
+        <div role="alert" className="mb-8 rounded-[2rem] bg-red-50 px-6 py-10 text-center">
+          <XCircle size={48} className="mx-auto text-red-600" />
+          <h1 className="mt-5 font-serif text-4xl text-[#302018]">
+            Thanh toán thất bại
+          </h1>
+          <p className="mt-3 text-sm text-[#715f54]">
+            Giao dịch đã hủy hoặc không thành công. Bạn có thể thử thanh toán lại nếu đơn còn trong thời gian thanh toán.
           </p>
         </div>
       ) : (
@@ -310,14 +299,29 @@ export default function OrdersPage() {
                       </InlineNotice>
                     </div>
                   )}
+                  {order.status === "PAYMENT_FAILED" && (
+                    <div className="mt-5 space-y-4">
+                      <div className="flex flex-wrap gap-3">
+                        <Button disabled={busy || pending || review || new Date(order.reservationExpiresAt) <= new Date()}
+                          onClick={() => void action(order, "retry")}>Thử thanh toán lại</Button>
+                        <Button variant="ghost" disabled={busy || pending || review}
+                          onClick={() => setCancelTarget(order.id)}>Hủy đơn</Button>
+                      </div>
+                    </div>
+                  )}
                   {order.status === "PENDING_PAYMENT" && (
                     <>
                       {detail &&
-                        bankDemo &&
-                        cardDemo &&
                         !pending &&
                         !review && (
                           <div className="mt-5 flex flex-wrap gap-2">
+                            <p className="w-full text-sm font-semibold">Chọn phương thức thanh toán</p>
+                            {configured && (<>
+                              <Button disabled={busy} variant={method === "card" ? "primary" : "secondary"} onClick={() => setMethod("card")}>
+                                Thẻ nội địa qua VNPay
+                              </Button>
+                            </>)}
+                            {bankDemo && (
                             <Button
                               disabled={busy}
                               variant={
@@ -326,31 +330,8 @@ export default function OrdersPage() {
                               onClick={() => setMethod("bank-demo")}
                             >
                               QR chuyển khoản
-                            </Button>
-                            <Button
-                              disabled={busy}
-                              variant={
-                                method === "card-demo" ? "primary" : "secondary"
-                              }
-                              onClick={() => setMethod("card-demo")}
-                            >
-                              Thẻ ngân hàng (demo)
-                            </Button>
+                            </Button>)}
                           </div>
-                        )}
-                      {detail &&
-                        cardDemo &&
-                        method === "card-demo" &&
-                        !pending &&
-                        !review && (
-                          <DemoCardForm
-                            amount={Number(order.finalAmount)}
-                            disabled={
-                              busy ||
-                              new Date(order.reservationExpiresAt) <= new Date()
-                            }
-                            onConfirm={() => void action(order, "card-demo")}
-                          />
                         )}
                       {detail &&
                         bankDemo &&
@@ -398,6 +379,9 @@ export default function OrdersPage() {
                                 ? "Đang xác nhận..."
                                 : "Xác nhận đã chuyển khoản"}
                             </Button>
+                            <Button fullWidth variant="secondary" className="mt-3"
+                              disabled={busy || new Date(order.reservationExpiresAt) <= new Date()}
+                              onClick={() => void action(order, "fail")}>Mô phỏng thanh toán thất bại</Button>
                             <p className="mt-3 text-xs leading-5 text-[#62735e]">
                               Nút xác nhận mô phỏng việc nhận tiền; hệ thống sẽ
                               trừ nguyên liệu và cập nhật điểm thưởng.
@@ -418,7 +402,7 @@ export default function OrdersPage() {
                         >
                           <RefreshCw size={15} /> Kiểm tra trạng thái
                         </Button>
-                        {configured && (
+                        {configured && (pending || !detail || method === "card") && (
                           <Button
                             disabled={
                               busy ||

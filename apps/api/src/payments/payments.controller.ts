@@ -25,6 +25,15 @@ export class PaymentsController {
   @Get('vnpay/ipn') ipn(@Query() query: Record<string, unknown>) {
     return this.payments.notification(query);
   }
+  @Post('vnpay/return')
+  @UseGuards(AuthGuard)
+  returned(@Req() req: AuthenticatedRequest, @Body() body: unknown) {
+    return this.payments.handleReturn(req.user.id, body);
+  }
+  @Post('vnpay/result')
+  result(@Body() body: unknown) {
+    return this.payments.publicReturn(body);
+  }
   @Post()
   @UseGuards(AuthGuard)
   create(@Req() req: AuthenticatedRequest, @Body() body: unknown) {
@@ -48,9 +57,14 @@ export class PaymentsController {
   bankQr(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.payments.bankQr(req.user.id, id);
   }
-  @Post('orders/:id/card-demo/confirm')
+  @Post('orders/:id/bank-transfer-demo/fail')
   @UseGuards(AuthGuard)
-  confirmCardDemo(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
-    return this.payments.confirmCardDemo(req.user.id, id);
+  failBankTransferDemo(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() body: unknown) {
+    return this.payments.failBankTransferDemo(req.user.id, id, body);
+  }
+  @Post('orders/:id/retry')
+  @UseGuards(AuthGuard)
+  retry(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.payments.retry(req.user.id, id);
   }
 }

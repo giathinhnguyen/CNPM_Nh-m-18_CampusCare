@@ -102,6 +102,7 @@ enum DrinkLevel {
 
 enum OrderStatus {
   PENDING_PAYMENT
+  PAYMENT_FAILED
   PAID
   CANCELLED
   EXPIRED

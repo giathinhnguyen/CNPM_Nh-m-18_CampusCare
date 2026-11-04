@@ -14,6 +14,7 @@ import PromotionsPage from "./pages/PromotionsPage";
 import RewardsPage from "./pages/RewardsPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import OrdersPage from "./pages/OrdersPage";
+import PaymentReturnPage from "./pages/PaymentReturnPage";
 
 function App() {
   return (
@@ -30,13 +31,13 @@ function App() {
           <Route path="/cart" element={<CartPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/payments/return" element={<PaymentReturnPage />} />
           <Route element={<ProtectedRoute />}>
             <Route path="/account" element={<AccountPage />} />
             <Route path="/checkout" element={<CheckoutPage />} />
             <Route path="/orders" element={<OrdersPage />} />
             <Route path="/orders/:id" element={<OrdersPage />} />
             <Route path="/orders/:id/confirmation" element={<OrdersPage />} />
-            <Route path="/payments/return" element={<OrdersPage />} />
           </Route>
           <Route path="/promotions" element={<PromotionsPage />} />
           <Route path="/rewards" element={<RewardsPage />} />

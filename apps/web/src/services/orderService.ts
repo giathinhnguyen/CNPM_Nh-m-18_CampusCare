@@ -96,6 +96,8 @@ export const orderService = {
   list: () => request<Order[]>("/orders"),
   forPayment: (id: string) =>
     request<Order>(`/payments/${encodeURIComponent(id)}/order`),
+  vnpayReturn: (params: Record<string, string>) =>
+    request<Order>("/payments/vnpay/return", params),
   get: (id: string) => request<Order>(`/orders/${encodeURIComponent(id)}`),
   cancel: (id: string) =>
     request<Order>(`/orders/${encodeURIComponent(id)}/cancel`, {}),
@@ -116,11 +118,12 @@ export const orderService = {
     request<BankQrDetails>(
       `/payments/orders/${encodeURIComponent(id)}/bank-qr`,
     ),
-  confirmCardDemo: (id: string) =>
+  failBankTransferDemo: (id: string, idempotencyKey: string) =>
     request<Order>(
-      `/payments/orders/${encodeURIComponent(id)}/card-demo/confirm`,
-      {},
+      `/payments/orders/${encodeURIComponent(id)}/bank-transfer-demo/fail`,
+      { idempotencyKey },
     ),
+  retry: (id: string) => request<Order>(`/payments/orders/${encodeURIComponent(id)}/retry`, {}),
   config: () =>
     request<{
       configured: boolean;
