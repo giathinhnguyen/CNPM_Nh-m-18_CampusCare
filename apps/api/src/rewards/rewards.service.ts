@@ -6,10 +6,14 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { isUuid, lockCustomer, validateObject } from './reward-transactions.js';
+import { InventoryService } from '../inventory/inventory.service.js';
 
 @Injectable()
 export class RewardsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly inventory: InventoryService = new InventoryService(prisma),
+  ) {}
 
   async getActiveRewardProducts() {
     const rewards = await this.prisma.rewardProduct.findMany({
@@ -45,7 +49,20 @@ export class RewardsService {
       },
     });
 
-    return rewards;
+    return Promise.all(
+      rewards.map(async (reward) => ({
+        ...reward,
+        productSize: {
+          ...reward.productSize,
+          product: {
+            ...reward.productSize.product,
+            stockQuantity: await this.inventory.availability(
+              reward.productSize.id,
+            ),
+          },
+        },
+      })),
+    );
   }
 
   async getBalance(userId: string) {
@@ -130,14 +147,10 @@ export class RewardsService {
             'Sản phẩm này hiện không thể đổi thưởng',
           );
         }
-        const quantity = await tx.cartItem.aggregate({
-          where: { userId, productId },
-          _sum: { quantity: true },
-        });
-        if ((quantity._sum.quantity ?? 0) + 1 > product.stockQuantity)
-          throw new BadRequestException(
-            'Sản phẩm đã hết hàng hoặc số lượng trong giỏ vượt tồn kho',
-          );
+        await this.inventory.assertAvailable(tx, [
+          ...(await tx.cartItem.findMany({ where: { userId } })),
+          { productSizeId: reward.productSizeId, quantity: 1 },
+        ]);
         const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
         if (user.loyaltyPoints - user.reservedPoints < reward.pointsRequired)
           throw new BadRequestException(

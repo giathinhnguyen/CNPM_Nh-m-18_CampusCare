@@ -32,7 +32,7 @@ export const cartIntegrationService = {
     // Tái sử dụng API PATCH từng món, không thêm API lựa chọn mới.
     const changes = items.filter((item) => (item.isSelected !== false) !== selectedIds.includes(item.id));
     const results = await Promise.allSettled(changes.map(async (item) => {
-      const response = await authenticatedFetch(`${API_BASE}/cart/items/${item.id}`, {
+      const response = await authenticatedFetch(`${API_BASE}/rewards/cart/items/${item.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isSelected: selectedIds.includes(item.id) }),

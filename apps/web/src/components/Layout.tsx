@@ -14,11 +14,12 @@ import {
 } from "lucide-react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { cx } from "../lib/utils";
+import { cartService } from "../services/cartService";
 
 const navItems = [
   { label: "Trang chủ", to: "/", enabled: true },
   { label: "Khuyến mãi", to: "/promotions", enabled: true },
-  { label: "Đổi điểm", to: "/rewards", enabled: true },
+  { label: "Đơn hàng", to: "/orders", enabled: true },
 ];
 
 export default function Layout() {
@@ -28,6 +29,37 @@ export default function Layout() {
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
+  const owner = user?.id ?? "guest";
+  const [cartSummary, setCartSummary] = useState<{ owner: string; count: number } | null>(null);
+  const cartCount = !loading && cartSummary?.owner === owner ? cartSummary.count : 0;
+
+  useEffect(() => {
+    if (loading) return;
+    let active = true;
+    let version = 0;
+    const refreshCount = async () => {
+      const request = ++version;
+      try {
+        const count = await cartService.getItemCount(owner !== "guest");
+        if (active && request === version) setCartSummary({ owner, count });
+      } catch {
+        if (active && request === version) setCartSummary(null);
+      }
+    };
+    const storageChanged = (event: StorageEvent) => {
+      if (event.key === "brewlite_guest_cart" || event.key === null) void refreshCount();
+    };
+    void refreshCount();
+    window.addEventListener("cart-updated", refreshCount);
+    window.addEventListener("focus", refreshCount);
+    window.addEventListener("storage", storageChanged);
+    return () => {
+      active = false;
+      window.removeEventListener("cart-updated", refreshCount);
+      window.removeEventListener("focus", refreshCount);
+      window.removeEventListener("storage", storageChanged);
+    };
+  }, [owner, loading, location.pathname]);
 
   function handleLogout() {
     logout();
@@ -113,11 +145,16 @@ export default function Layout() {
             {/* ĐÃ MỞ KHÓA GIỎ HÀNG */}
             <Link
               to="/cart"
-              aria-label="Giỏ hàng của bạn"
+              aria-label={`Giỏ hàng của bạn, ${cartCount} món`}
               title="Xem giỏ hàng"
               className="relative grid size-11 place-items-center rounded-full border border-[#e3d8cd] bg-white text-[#493227] transition hover:border-[#aa8b75] hover:bg-[#f5eee7]"
             >
               <ShoppingBag size={19} strokeWidth={1.8} />
+              {cartCount > 0 && (
+                <span aria-hidden="true" className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#a44a32] px-1 text-[10px] font-bold leading-none text-white ring-2 ring-[#faf7f2]">
+                  {cartCount > 99 ? "99+" : cartCount}
+                </span>
+              )}
             </Link>
 
             {/* ACCOUNT DROPDOWN */}
@@ -334,7 +371,6 @@ export default function Layout() {
                 Menu hôm nay
               </Link>
               <Link to="/promotions" className="transition hover:text-white">Khuyến mãi</Link>
-              <Link to="/rewards" className="transition hover:text-white">Đổi điểm</Link>
               <Link to="/cart" className="transition hover:text-white">
                 Giỏ hàng
               </Link>

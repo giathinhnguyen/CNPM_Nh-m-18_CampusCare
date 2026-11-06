@@ -27,7 +27,7 @@ export default function LoginPage() {
   }
 
   if (user) {
-    return <Navigate to={destination} replace />;
+    return <Navigate to={user.role === 'ADMIN' ? '/admin/ingredients' : destination.startsWith('/admin') ? '/' : destination} replace />;
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {

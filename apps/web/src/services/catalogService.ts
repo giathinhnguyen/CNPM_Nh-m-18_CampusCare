@@ -45,6 +45,9 @@ async function request<T>(path: string): Promise<T> {
 }
 
 export const catalogService = {
+  async getAvailability(sizeId: string, sweetness: string, ice: string) {
+    return request<{ stockQuantity: number }>(`/products/sizes/${encodeURIComponent(sizeId)}/availability?sweetness=${encodeURIComponent(sweetness)}&ice=${encodeURIComponent(ice)}`);
+  },
   async getCategories() {
     return request<ApiCategory[]>("/categories");
   },

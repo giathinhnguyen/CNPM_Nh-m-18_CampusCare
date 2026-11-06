@@ -4,22 +4,24 @@ import { PrismaClient } from '@prisma/client';
 import { afterAll, describe, expect, it } from 'vitest';
 import { RewardsService } from '../src/rewards/rewards.service.js';
 import { CartsService } from '../src/carts/carts.service.js';
-import { CartQuotesService } from '../src/carts/cart-quotes.service.js';
+import { RewardsCartService } from '../src/rewards/rewards-cart.service.js';
 import { PromotionsService } from '../src/promotions/promotions.service.js';
 import type { PrismaService } from '../src/prisma/prisma.service.js';
+import { recipeFixture } from './inventory-fixture.js';
 
 describe('Đổi thưởng: transaction PostgreSQL và yêu cầu đồng thời', () => {
   const prisma = new PrismaClient();
   const database = prisma as PrismaService;
   const rewards = new RewardsService(database);
-  const carts = new CartsService(database);
-  const cartQuotes = new CartQuotesService(
+  const carts = new RewardsCartService(
     database,
-    carts,
+    new CartsService(database),
     new PromotionsService(database),
   );
+  const cartQuotes = carts;
   const userIds: string[] = [];
   const categoryIds: string[] = [];
+  const ingredientIds: string[] = [];
   afterAll(async () => {
     const orderIds = (
       await prisma.order.findMany({
@@ -45,6 +47,8 @@ describe('Đổi thưởng: transaction PostgreSQL và yêu cầu đồng thời
       where: { categoryId: { in: categoryIds } },
     });
     await prisma.category.deleteMany({ where: { id: { in: categoryIds } } });
+    await prisma.ingredientStock.deleteMany({ where: { ingredientId: { in: ingredientIds } } });
+    await prisma.ingredient.deleteMany({ where: { id: { in: ingredientIds } } });
     await prisma.$disconnect();
   });
   async function customer(
@@ -84,7 +88,9 @@ describe('Đổi thưởng: transaction PostgreSQL và yêu cầu đồng thời
     const reward = await prisma.rewardProduct.create({
       data: { productSizeId: size.id, pointsRequired: cost },
     });
-    return { user, category, product, size, reward };
+    const ingredient = await recipeFixture(prisma, size.id, stock);
+    ingredientIds.push(ingredient.id);
+    return { user, category, product, size, reward, ingredient };
   }
   const redeem = (
     f: Awaited<ReturnType<typeof fixture>>,
@@ -218,11 +224,11 @@ describe('Đổi thưởng: transaction PostgreSQL và yêu cầu đồng thời
         productSizeId: f.size.id,
         quantity: 1,
       }),
-    ).rejects.toThrow('tối đa');
+    ).rejects.toThrow('nguyên liệu');
     const regular = cart.items.find((item) => !item.isReward)!;
     await expect(
       carts.updateQuantity(f.user.id, regular.id, 2),
-    ).rejects.toThrow('vượt tồn kho');
+    ).rejects.toThrow('nguyên liệu');
   });
   it('giỏ đã đủ số lượng tồn kho không thể thêm món thưởng', async () => {
     const f = await fixture(120, 1);
@@ -231,7 +237,7 @@ describe('Đổi thưởng: transaction PostgreSQL và yêu cầu đồng thời
       productSizeId: f.size.id,
       quantity: 1,
     });
-    await expect(redeem(f)).rejects.toThrow('tồn kho');
+    await expect(redeem(f)).rejects.toThrow('nguyên liệu');
   });
   it('báo giá dùng món thuộc tài khoản; không nhận giá hoặc cờ đổi thưởng từ client', async () => {
     const f = await fixture();
@@ -310,16 +316,16 @@ describe('Đổi thưởng: transaction PostgreSQL và yêu cầu đồng thời
     const f = await fixture();
     const redeemed = await redeem(f);
     const itemIds = [redeemed.cartItem!.id];
-    await prisma.product.update({
-      where: { id: f.product.id },
-      data: { stockQuantity: 0 },
+    await prisma.ingredientStock.update({
+      where: { ingredientId: f.ingredient.id },
+      data: { onHand: 0 },
     });
     await expect(cartQuotes.quote(f.user.id, { itemIds })).rejects.toThrow(
       'khả dụng',
     );
-    await prisma.product.update({
-      where: { id: f.product.id },
-      data: { stockQuantity: 10 },
+    await prisma.ingredientStock.update({
+      where: { ingredientId: f.ingredient.id },
+      data: { onHand: 200 },
     });
     await prisma.rewardProduct.update({
       where: { id: f.reward.id },
@@ -350,5 +356,68 @@ describe('Đổi thưởng: transaction PostgreSQL và yêu cầu đồng thời
       reservedPoints: 0,
       availablePoints: 500,
     });
+  });
+  it('đồng bộ giỏ khách: 8 yêu cầu cùng syncId chỉ cộng số lượng một lần', async () => {
+    const f = await fixture();
+    const item = { productId: f.product.id, productSizeId: f.size.id, quantity: 2 };
+    await carts.addToCart(f.user.id, item);
+    const body = { syncId: randomUUID(), items: [{ ...item, quantity: 1 }] };
+    await Promise.all(Array.from({ length: 8 }, () => carts.syncCart(f.user.id, body)));
+    const cart = await carts.getCart(f.user.id);
+    expect(cart.items).toHaveLength(1);
+    expect(cart.items[0].quantity).toBe(3);
+    expect(cart.totalAmount).toBe(150000);
+    expect(await prisma.cartSync.count({ where: { userId: f.user.id } })).toBe(1);
+    await carts.syncCart(f.user.id, body);
+    expect((await carts.getCart(f.user.id)).items[0].quantity).toBe(3);
+    await expect(carts.syncCart(f.user.id, { ...body, items: [item] })).rejects.toThrow('dữ liệu khác');
+    expect((await carts.getCart(f.user.id)).items[0].quantity).toBe(3);
+  });
+
+  it('giỏ khách không gộp vào món thưởng và báo giá chỉ giảm cho món mua thường', async () => {
+    const f = await fixture();
+    await redeem(f);
+    const body = { syncId: randomUUID(), items: [{ productId: f.product.id, productSizeId: f.size.id, quantity: 2 }] };
+    await Promise.all(Array.from({ length: 4 }, () => carts.syncCart(f.user.id, body)));
+    const cart = await carts.getCart(f.user.id);
+    expect(cart.items).toHaveLength(2);
+    expect(cart.items.find((item) => item.isReward)).toMatchObject({ quantity: 1, unitPrice: 0 });
+    expect(cart.items.find((item) => !item.isReward)).toMatchObject({ quantity: 2, unitPrice: 50000 });
+    const promotion = await prisma.promotion.create({ data: {
+      code: `TEST-${randomUUID()}`.toUpperCase(), discountType: 'PERCENTAGE', discountValue: 10, appliesToAllProducts: true,
+    } });
+    try {
+      const quote = await carts.quote(f.user.id, { itemIds: cart.items.map((item) => item.id), code: promotion.code });
+      expect(quote.totalAmount.toNumber()).toBe(100000);
+      expect(quote.discountAmount.toNumber()).toBe(10000);
+      expect(quote.finalAmount.toNumber()).toBe(90000);
+      expect((await rewards.getBalance(f.user.id)).reservedPoints).toBe(120);
+    } finally {
+      await prisma.promotion.delete({ where: { id: promotion.id } });
+    }
+  });
+
+  it('lỗi giữa lô đồng bộ rollback cả món và biên nhận, lần thử lại không cộng trùng', async () => {
+    const f = await fixture();
+    const item = { productId: f.product.id, productSizeId: f.size.id, quantity: 1 };
+    const syncId = randomUUID();
+    await expect(carts.syncCart(f.user.id, { syncId, items: [item, { ...item, toppingIds: [randomUUID()] }] }))
+      .rejects.toThrow('Topping');
+    expect(await prisma.cartItem.count({ where: { userId: f.user.id } })).toBe(0);
+    expect(await prisma.cartSync.count({ where: { userId: f.user.id } })).toBe(0);
+    await carts.syncCart(f.user.id, { syncId, items: [item] });
+    await carts.syncCart(f.user.id, { syncId, items: [item] });
+    expect((await carts.getCart(f.user.id)).items[0].quantity).toBe(1);
+  });
+
+  it('đồng bộ vượt tồn kho chỉ thêm phần còn lại và cảnh báo không lặp việc cộng', async () => {
+    const f = await fixture(120, 3);
+    const item = { productId: f.product.id, productSizeId: f.size.id, quantity: 2 };
+    await carts.addToCart(f.user.id, item);
+    const body = { syncId: randomUUID(), items: [item] };
+    const result = await carts.syncCart(f.user.id, body);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.items[0].quantity).toBe(3);
+    expect((await carts.syncCart(f.user.id, body)).items[0].quantity).toBe(3);
   });
 });

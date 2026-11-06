@@ -94,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const result = await authService.login(email, password);
 
     localStorage.setItem(TOKEN_KEY, result.accessToken);
+    localStorage.removeItem('brewlite_admin_access_token');
     setUser(result.user);
   }
   async function googleLogin(credential: string, password?: string) {
@@ -104,6 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
   function logout() {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem('brewlite_admin_access_token');
     setUser(null);
   }
 

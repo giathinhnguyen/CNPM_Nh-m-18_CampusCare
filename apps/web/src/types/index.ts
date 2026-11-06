@@ -2,6 +2,8 @@ export interface ProductSize {
   id: string;
   size: "S" | "M" | "L";
   priceAdjustment: number;
+  stockQuantity?: number;
+  customizationPolicies?: { axis: 'SUGAR' | 'ICE'; allowedLevels: number[]; defaultLevel: number; policyNote: string | null }[];
 }
 
 export interface Product {
@@ -42,4 +44,4 @@ export interface Promotion {
   products: { product: { id: string; name: string } }[];
 }
 
-export type OrderStatus = "PENDING_PAYMENT" | "PAID" | "CANCELLED" | "EXPIRED";
+export type OrderStatus = "PENDING_PAYMENT" | "PAYMENT_FAILED" | "PAID" | "CANCELLED" | "EXPIRED";

@@ -13,7 +13,11 @@ export async function syncGuestCart(
       throw new Error("Đang đồng bộ giỏ của tài khoản khác. Vui lòng thử lại");
     return inFlight.promise;
   }
+  if (typeof window !== "undefined" && !(typeof navigator !== "undefined" && navigator.locks))
+    throw new Error("Trình duyệt chưa hỗ trợ khóa đồng bộ giữa các tab. Giỏ khách vẫn được giữ; hãy dùng trình duyệt hỗ trợ Web Locks trên localhost hoặc HTTPS.");
   const run = async () => {
+    if (currentOwner() !== owner)
+      throw new Error("Tài khoản đã thay đổi trong khi chờ đồng bộ");
     const raw = localStorage.getItem(GUEST_CART_KEY);
     const pending = localStorage.getItem(PENDING_SYNC_KEY);
     if (!raw && !pending) return;
@@ -65,7 +69,10 @@ export async function syncGuestCart(
     localStorage.removeItem(PENDING_SYNC_KEY);
     return data;
   };
-  const promise = run();
+  // Web Locks phối hợp cả các tab cùng origin, không chỉ các component trong một tab.
+  const promise = typeof navigator !== "undefined" && navigator.locks
+    ? navigator.locks.request("brewlite_guest_cart_sync", run)
+    : run();
   inFlight = { owner, promise };
   try {
     return await promise;

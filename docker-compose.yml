@@ -52,7 +52,16 @@ services:
     environment:
       NODE_ENV: development
       REWARDS_TEST_PAYMENTS: ${REWARDS_TEST_PAYMENTS:-false}
+      BANK_TRANSFER_DEMO_ENABLED: ${BANK_TRANSFER_DEMO_ENABLED:-false}
+      CARD_DEMO_ENABLED: ${CARD_DEMO_ENABLED:-false}
+      BANK_QR_BIN: ${BANK_QR_BIN:-}
+      BANK_QR_BANK_NAME: ${BANK_QR_BANK_NAME:-}
+      BANK_QR_ACCOUNT_NUMBER: ${BANK_QR_ACCOUNT_NUMBER:-}
+      BANK_QR_ACCOUNT_NAME: ${BANK_QR_ACCOUNT_NAME:-}
       PORT: 3000
+      VNPAY_TMN_CODE: ${VNPAY_TMN_CODE:-}
+      VNPAY_HASH_SECRET: ${VNPAY_HASH_SECRET:-}
+      VNPAY_RETURN_URL: ${VNPAY_RETURN_URL:-http://localhost:5173/payments/return}
       WEB_ORIGIN: http://localhost:5173
       JWT_SECRET: ${JWT_SECRET}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
@@ -71,7 +80,7 @@ services:
     image: postgres:16-bookworm
     container_name: brewlite-postgres
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}

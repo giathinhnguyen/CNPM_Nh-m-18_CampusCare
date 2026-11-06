@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cartIntegrationService } from '../src/services/cartIntegrationService.ts';
+import { cartService } from '../src/services/cartService.ts';
 
 const originalFetch = globalThis.fetch;
 let values;
@@ -33,7 +34,7 @@ test('account selection reuses the existing PATCH API without sending quantity o
   };
   await cartIntegrationService.saveSelection([{ id: 'a', isSelected: true }, { id: 'b', isSelected: false }], [], true);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, 'http://localhost:3000/api/cart/items/a');
+  assert.equal(calls[0].url, 'http://localhost:3000/api/rewards/cart/items/a');
   assert.equal(calls[0].init.method, 'PATCH');
   assert.deepEqual(JSON.parse(calls[0].init.body), { isSelected: false });
   assert.ok(calls[0].init.headers.get('Authorization').startsWith('Bearer '));
@@ -50,4 +51,54 @@ test('partial PATCH failure waits for remaining requests and reports failure', a
   };
   await assert.rejects(cartIntegrationService.saveSelection([{ id: 'a' }, { id: 'b' }], [], true), /Chưa lưu được đầy đủ/);
   assert.equal(completed, 1);
+});
+
+test('badge counts quantities and follows successful guest cart changes', async () => {
+  const originalWindow = globalThis.window;
+  let updates = 0;
+  globalThis.window = { dispatchEvent(event) { if (event.type === 'cart-updated') updates++; } };
+  try {
+    assert.equal(await cartService.getItemCount(false), 0);
+    await cartService.addToCart({ productId: 'drink', productSizeId: 'size', quantity: 3, unitPrice: 50000, stockQuantity: 10 }, false);
+    assert.equal(await cartService.getItemCount(false), 3);
+    const [{ id }] = JSON.parse(values.get('brewlite_guest_cart'));
+    await cartService.updateQuantity(id, 2, false);
+    assert.equal(await cartService.getItemCount(false), 2);
+    await cartService.removeItem(id, false);
+    assert.equal(await cartService.getItemCount(false), 0);
+    assert.equal(updates, 3);
+  } finally {
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  }
+});
+
+test('account badge only reads the cart, without syncing or clearing guest items', async () => {
+  login();
+  const guest = JSON.stringify([{ id: 'guest', quantity: 4 }]);
+  values.set('brewlite_guest_cart', guest);
+  globalThis.fetch = async (url, init) => {
+    assert.equal(url, 'http://localhost:3000/api/rewards/cart');
+    assert.ok(!init.method || init.method === 'GET');
+    return new Response(JSON.stringify({ items: [{ quantity: 3 }, { quantity: 1, isReward: true }] }));
+  };
+  assert.equal(await cartService.getItemCount(true), 4);
+  assert.equal(values.get('brewlite_guest_cart'), guest);
+});
+
+test('failed account mutations do not notify the badge of a successful change', async () => {
+  login();
+  const originalWindow = globalThis.window;
+  let updates = 0;
+  globalThis.window = { dispatchEvent() { updates++; } };
+  globalThis.fetch = async () => new Response('{}', { status: 500 });
+  try {
+    await assert.rejects(cartService.addToCart({ quantity: 1 }, true));
+    await assert.rejects(cartService.updateQuantity('row', 2, true));
+    await assert.rejects(cartService.removeItem('row', true));
+    assert.equal(updates, 0);
+  } finally {
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+  }
 });
