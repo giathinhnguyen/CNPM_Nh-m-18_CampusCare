@@ -26,8 +26,7 @@ const products = [
     description: 'Cà phê đậm vị, kem muối mịn màng',
     price: 49000,
     stock: 18,
-    image:
-      'https://images.unsplash.com/photo-1749105504681-1889a810be41?auto=format&fit=crop&w=1200&q=85',
+    image: '/products/salted-cloud-coffee.webp',
   },
   {
     name: 'Kyoto Matcha Latte',
@@ -35,8 +34,7 @@ const products = [
     description: 'Matcha Nhật Bản, sữa tươi thanh nhẹ',
     price: 55000,
     stock: 9,
-    image:
-      'https://images.unsplash.com/photo-1749104028327-a33087ea4f47?auto=format&fit=crop&w=1200&q=85',
+    image: '/products/kyoto-matcha-latte.webp',
   },
   {
     name: 'Brown Sugar Boba',
@@ -44,8 +42,7 @@ const products = [
     description: 'Trà sữa ô long, đường nâu và trân châu',
     price: 59000,
     stock: 14,
-    image:
-      'https://images.unsplash.com/photo-1686139073338-ca76f475086a?auto=format&fit=crop&w=1200&q=85',
+    image: '/products/brown-sugar-boba.webp',
   },
   {
     name: 'Caramel Cold Brew',
@@ -53,8 +50,7 @@ const products = [
     description: 'Cold brew ủ 16 giờ, caramel cháy',
     price: 52000,
     stock: 11,
-    image:
-      'https://images.unsplash.com/photo-1694245876425-b6af2c09ddba?auto=format&fit=crop&w=1200&q=85',
+    image: '/products/caramel-cold-brew.webp',
   },
   {
     name: 'Strawberry Matcha',
@@ -62,8 +58,7 @@ const products = [
     description: 'Dâu tây tươi, matcha và sữa yến mạch',
     price: 62000,
     stock: 7,
-    image:
-      'https://images.unsplash.com/photo-1749104953222-9d6ed76e4bf0?auto=format&fit=crop&w=1200&q=85',
+    image: '/products/strawberry-matcha.webp',
   },
   {
     name: 'Cocoa Frost',
@@ -71,8 +66,7 @@ const products = [
     description: 'Cacao đậm, đá xay và kem tươi',
     price: 65000,
     stock: 0,
-    image:
-      'https://images.unsplash.com/photo-1629644087983-c85380e0b543?auto=format&fit=crop&w=1200&q=85',
+    image: '/products/cocoa-frost.webp',
   },
   {
     name: 'Coconut Latte',
@@ -80,8 +74,7 @@ const products = [
     description: 'Espresso, sữa dừa và kem mịn',
     price: 56000,
     stock: 16,
-    image:
-      'https://images.unsplash.com/photo-1749105504681-1889a810be41?auto=format&fit=crop&w=1200&q=85',
+    image: '/products/coconut-latte.webp',
   },
   {
     name: 'Jasmine Peach Tea',
@@ -89,8 +82,7 @@ const products = [
     description: 'Trà nhài, đào vàng và cam tươi',
     price: 52000,
     stock: 20,
-    image:
-      'https://images.unsplash.com/photo-1739126164994-d555b6b11254?auto=format&fit=crop&w=1200&q=85',
+    image: '/products/jasmine-peach-tea.webp',
   },
   {
     name: 'Roasted Oolong Milk Tea',
@@ -98,8 +90,7 @@ const products = [
     description: 'Ô long rang, sữa tươi và mật ong',
     price: 57000,
     stock: 13,
-    image:
-      'https://images.unsplash.com/photo-1686139073338-ca76f475086a?auto=format&fit=crop&w=1200&q=85',
+    image: '/products/roasted-oolong-milk-tea.webp',
   },
   {
     name: 'Citrus Espresso Tonic',
@@ -107,8 +98,7 @@ const products = [
     description: 'Espresso, tonic và cam vàng',
     price: 54000,
     stock: 10,
-    image:
-      'https://images.unsplash.com/photo-1694245876425-b6af2c09ddba?auto=format&fit=crop&w=1200&q=85',
+    image: '/products/citrus-espresso-tonic.webp',
   },
   {
     name: 'Mango Yogurt Frost',
@@ -116,8 +106,7 @@ const products = [
     description: 'Xoài chín, sữa chua và đá xay',
     price: 64000,
     stock: 8,
-    image:
-      'https://images.unsplash.com/photo-1749104028327-a33087ea4f47?auto=format&fit=crop&w=1200&q=85',
+    image: '/products/mango-yogurt-frost.webp',
   },
   {
     name: 'Hojicha Cream Cloud',
@@ -125,8 +114,7 @@ const products = [
     description: 'Hojicha rang, sữa tươi và kem cheese',
     price: 61000,
     stock: 12,
-    image:
-      'https://images.unsplash.com/photo-1749104953222-9d6ed76e4bf0?auto=format&fit=crop&w=1200&q=85',
+    image: '/products/hojicha-cream-cloud.webp',
   },
 ];
 
