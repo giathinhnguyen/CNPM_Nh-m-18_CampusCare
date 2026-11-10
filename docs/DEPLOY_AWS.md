@@ -5,6 +5,18 @@ Repository: https://github.com/giathinhnguyen/CNPM_Nh-m-18_CampusCare
 Nhanh trien khai: `main`, sau khi hop nhat `payment-and-administrator-ui`.
 Ten mien: **brewlitesguu.duckdns.org**.
 
+## Ban deploy ngay 10/11/2026
+
+- Website: https://brewlitesguu.duckdns.org
+- Swagger: https://brewlitesguu.duckdns.org/api/docs
+- Elastic IP: `13.55.247.168`; EC2 `brewlite-web` trong project `Future Startup`, Sydney.
+- DNS da tro dung IP, HTTPS da cap thanh cong. API va database bao healthy.
+- Menu 12 mon, 26 nguyen lieu, 3 khuyen mai; admin rieng cho ban deploy.
+- Da kiem tra truy cap Internet: anh san pham, SPA/deep link, admin/JWT, 58 duong dan OpenAPI, cau hinh hai cong sandbox va tu choi callback khong co chu ky. Giao dien admin tai duoc bang phien dang nhap hop le.
+- Tai khoan va SSH key chi luu trong `.deployment/THONG_TIN_TRUY_CAP.md` va `.deployment/brewlite-ec2.pem` tren may quan tri, khong commit.
+- Can chu OAuth client them domain vao Authorized JavaScript origins (Google dang bao origin not allowed). SMTP_PASS chua duoc cau hinh, chua gui duoc ma xac minh dang ky. Dang nhap admin bang email/mat khau da kiem tra thanh cong.
+- Can kiem thu thanh toan tren dien thoai sau khi deploy; kiem tra callback tu choi chu ky sai khong thay the giao dich thanh toan thanh cong.
+
 ## Cau truc
 
 - Mot EC2 Ubuntu 24.04, de xuat `t3.small` (2 GB RAM), o EBS gp3 ma hoa 30 GB va swap 2 GB cho build.
@@ -17,11 +29,11 @@ AWS tinh phi EC2, EBS va public IPv4/Elastic IP theo tai khoan va thoi gian su d
 
 ## Dang nhap AWS tren may ca nhan
 
-Profile hien co: `whybi`, region `ap-southeast-2`.
+Profile rieng cho BrewLite: `brewlite`, region `ap-southeast-2` (Sydney), project AWS `Future Startup`. Profile `whybi` cu duoc giu nguyen.
 
 ```powershell
-aws login --profile whybi
-aws sts get-caller-identity --profile whybi
+aws login --profile brewlite --region ap-southeast-2
+aws sts get-caller-identity --profile brewlite
 ```
 
 Neu session het han, dang nhap lai; khong can gui Access Key hoac mat khau vao chat. Chi tao tai nguyen sau khi xac dinh dung tai khoan AWS.
