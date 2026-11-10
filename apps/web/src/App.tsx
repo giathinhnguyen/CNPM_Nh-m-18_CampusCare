@@ -32,6 +32,7 @@ function App() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/payments/return" element={<PaymentReturnPage />} />
+          <Route path="/payments/zalopay/return" element={<PaymentReturnPage provider="zalopay" />} />
           <Route element={<ProtectedRoute />}>
             <Route path="/account" element={<AccountPage />} />
             <Route path="/checkout" element={<CheckoutPage />} />

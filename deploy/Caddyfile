@@ -1,0 +1,21 @@
+{$BREWLITE_DOMAIN:brewlitesguu.duckdns.org} {
+	encode zstd gzip
+	@api path /api /api/*
+	handle @api {
+		reverse_proxy api:3000
+	}
+	handle {
+		reverse_proxy web:8080
+	}
+}
+
+# HTTP access by IP is useful for /api/health before DuckDNS has been updated.
+http://{$BREWLITE_PUBLIC_IP:127.0.0.1} {
+	@api path /api /api/*
+	handle @api {
+		reverse_proxy api:3000
+	}
+	handle {
+		reverse_proxy web:8080
+	}
+}

@@ -1,4 +1,11 @@
 import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiUnauthorizedResponse,
+  ApiForbiddenResponse,
+} from '@nestjs/swagger';
+import { ApiRequestBody } from '../swagger/request-bodies.js';
+import {
   Body,
   Controller,
   Get,
@@ -13,7 +20,11 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { AdminGuard } from './admin.guard.js';
 import { AdminService } from './admin.service.js';
 
+@ApiTags('admin')
+@ApiForbiddenResponse({ description: 'ADMIN role required.' })
 @Controller('admin')
+@ApiBearerAuth()
+@ApiUnauthorizedResponse({ description: 'JWT required, invalid or expired.' })
 @UseGuards(AdminGuard)
 export class AdminController {
   constructor(
@@ -32,37 +43,39 @@ export class AdminController {
   @Get('customers/:id/orders') orders(@Param('id') id: string) {
     return this.admin.customerOrders(id);
   }
-  @Post('ingredients') ingredient(@Body() body: unknown) {
+  @ApiRequestBody('ingredient')
+  @Post('ingredients')
+  ingredient(@Body() body: unknown) {
     return this.admin.write(() => this.admin.ingredient(null, body));
   }
-  @Patch('ingredients/:id') editIngredient(
-    @Param('id') id: string,
-    @Body() body: unknown,
-  ) {
+  @ApiRequestBody('editIngredient')
+  @Patch('ingredients/:id')
+  editIngredient(@Param('id') id: string, @Body() body: unknown) {
     return this.admin.write(() => this.admin.ingredient(id, body));
   }
-  @Post('products') product(@Body() body: unknown) {
+  @ApiRequestBody('product')
+  @Post('products')
+  product(@Body() body: unknown) {
     return this.admin.write(() => this.admin.product(null, body));
   }
-  @Patch('products/:id') editProduct(
-    @Param('id') id: string,
-    @Body() body: unknown,
-  ) {
+  @ApiRequestBody('editProduct')
+  @Patch('products/:id')
+  editProduct(@Param('id') id: string, @Body() body: unknown) {
     return this.admin.write(() => this.admin.product(id, body));
   }
-  @Patch('sizes/:id/recipe') recipe(
-    @Param('id') id: string,
-    @Body() body: unknown,
-  ) {
+  @ApiRequestBody('recipe')
+  @Patch('sizes/:id/recipe')
+  recipe(@Param('id') id: string, @Body() body: unknown) {
     return this.admin.write(() => this.admin.recipe(id, body));
   }
-  @Post('promotions') promotion(@Body() body: unknown) {
+  @ApiRequestBody('promotion')
+  @Post('promotions')
+  promotion(@Body() body: unknown) {
     return this.admin.write(() => this.admin.promotion(null, body));
   }
-  @Patch('promotions/:id') editPromotion(
-    @Param('id') id: string,
-    @Body() body: unknown,
-  ) {
+  @ApiRequestBody('editPromotion')
+  @Patch('promotions/:id')
+  editPromotion(@Param('id') id: string, @Body() body: unknown) {
     return this.admin.write(() => this.admin.promotion(id, body));
   }
 }

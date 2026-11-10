@@ -122,6 +122,7 @@ enum PaymentMethod {
   BANK_TRANSFER
   CARD_DEMO
   VNPAY
+  ZALOPAY
 
   @@map("payment_method_enum")
 }

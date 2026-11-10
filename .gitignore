@@ -25,3 +25,6 @@ pnpm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# Local deployment state, server keys and environment files
+.deployment/

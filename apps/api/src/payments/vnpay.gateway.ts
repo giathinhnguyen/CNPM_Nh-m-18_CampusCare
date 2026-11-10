@@ -82,8 +82,8 @@ export class VnpayGateway {
       vnp_ReturnUrl:
         process.env.VNPAY_RETURN_URL || 'http://localhost:5173/payments/return',
     };
-    if (channel === 'card') params.vnp_BankCode = 'VNBANK';
-    if (channel === 'wallet') params.vnp_BankCode = 'VNPAYQR';
+    if (channel !== 'card') throw new ServiceUnavailableException('VNPay chỉ hỗ trợ thẻ nội địa.');
+    params.vnp_BankCode = 'VNBANK';
     const query = queryString(params);
     return `https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?${query}&vnp_SecureHash=${this.sign(query)}`;
   }

@@ -1,0 +1,42 @@
+FROM node:24-bookworm-slim AS base
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0 COREPACK_HOME=/opt/corepack
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && corepack enable && corepack prepare pnpm@12.14.0 --activate
+WORKDIR /workspace
+
+FROM base AS dependencies
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY apps/api/package.json ./apps/api/package.json
+COPY apps/web/package.json ./apps/web/package.json
+RUN pnpm install --frozen-lockfile
+
+FROM dependencies AS api-build
+COPY apps/api ./apps/api
+RUN DATABASE_URL=postgresql://build:build@localhost:5432/build pnpm --filter api exec prisma generate \
+    && pnpm --filter api build
+
+FROM dependencies AS web-build
+COPY apps/web ./apps/web
+ARG VITE_API_URL=/api
+ARG VITE_GOOGLE_CLIENT_ID
+ENV VITE_API_URL=${VITE_API_URL} VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID}
+RUN test -n "$VITE_GOOGLE_CLIENT_ID" && pnpm --filter web build
+
+FROM base AS api
+ENV NODE_ENV=production
+COPY --from=api-build --chown=node:node /workspace/node_modules ./node_modules
+COPY --from=api-build --chown=node:node /workspace/apps/api ./apps/api
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN chown -R node:node /opt/corepack
+USER node
+# pnpm 12 prepares a platform binary per runtime user; cache it at build time.
+RUN pnpm --version
+WORKDIR /workspace/apps/api
+EXPOSE 3000
+CMD ["node", "dist/main.js"]
+
+FROM nginx:1.28-alpine AS web
+COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=web-build /workspace/apps/web/dist /usr/share/nginx/html
+EXPOSE 8080

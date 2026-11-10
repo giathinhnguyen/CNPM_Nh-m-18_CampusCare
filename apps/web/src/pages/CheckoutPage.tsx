@@ -5,7 +5,7 @@ import {
   CreditCard,
   LoaderCircle,
   LockKeyhole,
-  Landmark,
+  QrCode,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -40,11 +40,12 @@ export default function CheckoutPage() {
   const [error, setError] = useState("");
   const [phoneError, setPhoneError] = useState("");
   const [configured, setConfigured] = useState(false);
-  const [bankDemo, setBankDemo] = useState(false);
+  const [zalopayConfigured, setZalopayConfigured] = useState(false);
   const requestKey = useRef(crypto.randomUUID());
   const submitting = useRef(false);
   const [uncertain, setUncertain] = useState(false);
   const pendingBody = useRef<Record<string, unknown> | null>(null);
+  const [pendingSnapshot, setPendingSnapshot] = useState<Record<string, unknown> | null>(null);
   const storageKey = `brewlite_checkout_attempt:${user?.id}`;
   useEffect(() => {
     let active = true;
@@ -53,6 +54,7 @@ export default function CheckoutPage() {
         const saved = sessionStorage.getItem(storageKey);
         if (saved) {
           pendingBody.current = JSON.parse(saved);
+          setPendingSnapshot(pendingBody.current);
           requestKey.current = String(
             pendingBody.current!.idempotencyKey,
           ) as `${string}-${string}-${string}-${string}-${string}`;
@@ -70,10 +72,10 @@ export default function CheckoutPage() {
         );
         if (!active) return;
         setConfigured(config.configured);
-        setBankDemo(config.bankTransferDemoEnabled);
+        setZalopayConfigured(config.zalopayConfigured);
         setMethod(
-          config.bankTransferDemoEnabled
-            ? "bank-demo"
+          config.zalopayConfigured
+            ? "zalopay"
             : "card",
         );
         setItems(selected);
@@ -135,6 +137,7 @@ export default function CheckoutPage() {
       const order = await orderService.create(body);
       sessionStorage.removeItem(storageKey);
       pendingBody.current = null;
+      setPendingSnapshot(null);
       requestKey.current = crypto.randomUUID();
       setUncertain(false);
       localStorage.removeItem("brewlite_checkout_selection");
@@ -148,20 +151,18 @@ export default function CheckoutPage() {
         navigate(`/orders/${order.id}`, { replace: true });
         return;
       }
-      if (method === "bank-demo") {
-        navigate(`/orders/${order.id}?method=${method}`, { replace: true });
-        return;
-      }
       try {
         const payment = await orderService.pay(
           order.id,
           crypto.randomUUID(),
           method,
         );
-        if (payment.paymentUrl) window.location.assign(payment.paymentUrl);
+        if (method === "zalopay") navigate(`/orders/${order.id}?method=zalopay`, { replace: true });
+        else if (payment.paymentUrl) window.location.assign(payment.paymentUrl);
         else navigate(`/orders/${order.id}`, { replace: true });
-      } catch {
-        navigate(`/orders/${order.id}`, { replace: true });
+      } catch (cause) {
+        navigate(`/orders/${order.id}?method=${method}`, { replace: true,
+          state: { paymentError: cause instanceof Error ? cause.message : "Chưa tạo được thanh toán. Vui lòng kiểm tra trạng thái đơn." } });
       }
     } catch (cause) {
       setError(
@@ -176,6 +177,7 @@ export default function CheckoutPage() {
       ) {
         sessionStorage.removeItem(storageKey);
         pendingBody.current = null;
+        setPendingSnapshot(null);
         setUncertain(false);
         requestKey.current = crypto.randomUUID();
         try {
@@ -227,7 +229,7 @@ export default function CheckoutPage() {
                   id="checkout-name"
                   name="name"
                   defaultValue={String(
-                    pendingBody.current?.customerName ?? user?.fullName ?? "",
+                    pendingSnapshot?.customerName ?? user?.fullName ?? "",
                   )}
                   maxLength={100}
                   required={!uncertain}
@@ -240,7 +242,7 @@ export default function CheckoutPage() {
                   id="checkout-phone"
                   name="phone"
                   defaultValue={String(
-                    pendingBody.current?.customerPhone ?? "",
+                    pendingSnapshot?.customerPhone ?? "",
                   )}
                   type="tel"
                   placeholder="0901 234 567"
@@ -268,7 +270,7 @@ export default function CheckoutPage() {
                 <TextInput
                   id="checkout-note"
                   name="note"
-                  defaultValue={String(pendingBody.current?.note ?? "")}
+                  defaultValue={String(pendingSnapshot?.note ?? "")}
                   maxLength={255}
                   placeholder="Ví dụ: Mình sẽ đến nhận lúc 10 giờ..."
                 />
@@ -281,33 +283,24 @@ export default function CheckoutPage() {
             </h2>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               {[
-                ...(bankDemo
-                  ? [
-                      {
-                        id: "bank-demo",
-                        title: "Chuyển khoản ngân hàng",
-                        detail: "Demo đồ án · khách tự xác nhận",
-                        icon: Landmark,
-                      },
-                    ]
-                  : []),
+                {
+                  id: "zalopay",
+                  title: "Ví ZaloPay",
+                  detail: zalopayConfigured ? "Quét mã thanh toán" : "Tạm thời chưa khả dụng",
+                  icon: QrCode,
+                },
                 {
                   id: "card",
                   title: "Thẻ ngân hàng",
-                  detail: "Thẻ nội địa qua VNPay",
+                  detail: configured ? "Thẻ nội địa qua VNPay" : "Tạm thời chưa khả dụng",
                   icon: CreditCard,
                 },
               ]
-                .filter(
-                  (option) =>
-                    option.id === "bank-demo" ||
-                    configured,
-                )
                 .map((option) => (
                   <button
                     key={option.id}
                     type="button"
-                    disabled={busy}
+                    disabled={busy || (option.id === "zalopay" ? !zalopayConfigured : !configured)}
                     aria-pressed={method === option.id}
                     onClick={() => setMethod(option.id)}
                     className={`relative flex min-h-24 items-center gap-4 rounded-2xl border p-4 text-left ${method === option.id ? "border-[#5d765e] bg-[#edf3eb]" : "border-[#ded4ca]"}`}
@@ -333,13 +326,13 @@ export default function CheckoutPage() {
                 ))}
             </div>
             <p className="mt-4 text-sm leading-6 text-[#837167]">
-              {method === "bank-demo"
-                ? "QR được tạo theo đúng số tiền và mã đơn. Bản đồ án vẫn cho phép tự xác nhận để demo mà không cần chuyển tiền thật."
+              {method === "zalopay"
+                ? "Quét mã bằng ứng dụng ZaloPay để thanh toán. Đơn hàng sẽ được cập nhật sau khi hoàn tất."
                 : "Bạn sẽ nhập thông tin thẻ nội địa tại VNPay. Đây là môi trường sandbox, dùng để kiểm thử."}
             </p>
-            {!configured && !bankDemo && (
+            {!configured && !zalopayConfigured && (
               <p className="mt-3 text-sm text-amber-800">
-                Thanh toán VNPay chưa sẵn sàng. Vui lòng liên hệ quán hoặc quay
+                Thanh toán trực tuyến chưa sẵn sàng. Vui lòng liên hệ quán hoặc quay
                 lại sau.
               </p>
             )}
@@ -411,7 +404,7 @@ export default function CheckoutPage() {
             <span className="text-xl font-bold">
               {formatCurrency(
                 quote?.finalAmount ??
-                  Number(pendingBody.current?.expectedAmount ?? 0),
+                  Number(pendingSnapshot?.expectedAmount ?? 0),
               )}
             </span>
           </div>
@@ -424,8 +417,8 @@ export default function CheckoutPage() {
               busy ||
               (!uncertain &&
                 (!quote ||
-                  (!(method === "bank-demo"
-                    ? bankDemo
+                  (!(method === "zalopay"
+                    ? zalopayConfigured
                     : configured) &&
                     quote.finalAmount > 0)))
             }
