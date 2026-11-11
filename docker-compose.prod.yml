@@ -40,6 +40,7 @@ services:
       VNPAY_TMN_CODE: ${VNPAY_TMN_CODE:-}
       VNPAY_HASH_SECRET: ${VNPAY_HASH_SECRET:-}
       VNPAY_API_IP: ${BREWLITE_PUBLIC_IP:-127.0.0.1}
+      REFUND_MODE: ${REFUND_MODE:-gateway}
       VNPAY_RETURN_URL: https://${BREWLITE_DOMAIN:-brewlitesguu.duckdns.org}/payments/return
       ZALOPAY_APP_ID: ${ZALOPAY_APP_ID:-}
       ZALOPAY_KEY1: ${ZALOPAY_KEY1:-}

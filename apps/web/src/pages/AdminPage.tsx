@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "../components/ui";
 import RefundActions from "../components/RefundActions";
+import { isSimulatedRefund } from "../lib/utils";
 import {
   adminService,
   type AdminData,
@@ -1121,7 +1122,7 @@ function CustomerOrders({
           >
             <div className="flex flex-wrap justify-between gap-3">
               <strong>{o.orderCode}</strong>
-              <span>{statusNames[o.status] ?? o.status}</span>
+              <span>{o.status === "REFUNDED" && isSimulatedRefund(o) ? "Đã hủy · Hoàn tiền mô phỏng" : statusNames[o.status] ?? o.status}</span>
             </div>
             {o.payments.some(
               (p) =>

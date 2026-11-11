@@ -54,8 +54,11 @@ export const statusLabels: Record<OrderStatus, string> = {
   CANCELLED: "Đã hủy",
   EXPIRED: "Hết hạn thanh toán",
   REFUND_PENDING: "Đang hoàn tiền",
-  REFUNDED: "Đã hủy · Đã hoàn tiền",
+  REFUNDED: "Đã hủy sau thanh toán",
 };
+
+export const isSimulatedRefund = (order: { refunds?: { mode?: string }[] }) =>
+  order.refunds?.[0]?.mode === "SIMULATION";
 
 export const cx = (
   ...classes: Array<string | false | null | undefined>

@@ -14,7 +14,7 @@ import {
   orderService,
   type Order,
 } from "../services/orderService";
-import { formatCurrency } from "../lib/utils";
+import { formatCurrency, isSimulatedRefund } from "../lib/utils";
 import { useAuth } from "../contexts/AuthContext";
 import ZalopayQrPanel from "../components/ZalopayQrPanel";
 import RefundActions from "../components/RefundActions";
@@ -26,7 +26,7 @@ const labels = {
   CANCELLED: "Đã hủy",
   EXPIRED: "Hết hạn",
   REFUND_PENDING: "Đang hoàn tiền",
-  REFUNDED: "Đã hủy · Đã hoàn tiền",
+  REFUNDED: "Đã hủy sau thanh toán",
 };
 function paymentWindowExpired(order: Order, now: number) {
   return order.status === "EXPIRED" ||
@@ -184,8 +184,8 @@ export default function OrdersPage() {
       className={`mx-auto px-4 py-8 sm:px-6 md:py-14 ${detail ? "max-w-3xl" : "max-w-5xl"}`}
     >
       {detail && ["REFUND_PENDING", "REFUNDED"].includes(orders[0]?.status) ? (
-        <PageTitle eyebrow="Đơn hàng của bạn" title={orders[0].status === "REFUNDED" ? "Đơn đã hủy và hoàn tiền" : "Đang xử lý hoàn tiền"}
-          description={orders[0].status === "REFUNDED" ? "Mời bạn quay lại menu chọn đồ uống yêu thích." : "Yêu cầu hủy đã được tiếp nhận. Kết quả sẽ cập nhật khi cổng xác nhận."} />
+        <PageTitle eyebrow="Đơn hàng của bạn" title={orders[0].status === "REFUNDED" ? isSimulatedRefund(orders[0]) ? "Đơn đã hủy · Hoàn tiền mô phỏng" : "Đơn đã hủy và hoàn tiền" : "Đang xử lý hoàn tiền"}
+          description={isSimulatedRefund(orders[0]) ? "Chế độ đồ án: không chuyển tiền qua ngân hàng. Mời bạn chọn một đồ uống khác." : orders[0].status === "REFUNDED" ? "Mời bạn quay lại menu chọn đồ uống yêu thích." : "Yêu cầu hủy đã được tiếp nhận. Kết quả sẽ cập nhật khi cổng xác nhận."} />
       ) : confirmed ? (
         <div className="mb-8 rounded-[2rem] bg-[#e4eee1] px-6 py-10 text-center">
           <CheckCircle2 size={48} className="mx-auto text-[#527155]" />
@@ -282,7 +282,7 @@ export default function OrdersPage() {
                     <span
                       className={`h-fit rounded-full px-3 py-2 text-xs font-semibold ${order.status === "PAID" ? "bg-[#e4eee1] text-[#527155]" : "bg-[#f5ede2] text-[#80654c]"}`}
                     >
-                      {labels[visibleStatus(order, now)]}
+                      {order.status === "REFUNDED" && isSimulatedRefund(order) ? "Đã hủy · Hoàn tiền mô phỏng" : labels[visibleStatus(order, now)]}
                     </span>
                   </div>
                   {simulated && (

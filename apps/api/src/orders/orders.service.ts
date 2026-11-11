@@ -35,7 +35,7 @@ const details = {
   },
   loyaltyTxs: { select: { type: true, pointsChange: true } },
   refunds: {
-    select: { id: true, amount: true, reason: true, status: true, providerRefundId: true, createdAt: true, updatedAt: true },
+    select: { id: true, amount: true, reason: true, status: true, mode: true, providerRefundId: true, createdAt: true, updatedAt: true },
     orderBy: { createdAt: 'desc' as const },
   },
 };

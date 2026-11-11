@@ -13,6 +13,8 @@ export class RefundsController {
   @ApiOperation({
     summary:
       'Customer owner or administrator: cancel and fully refund within 2 minutes of paidAt',
+    description:
+      'The server selects GATEWAY or SIMULATION from REFUND_MODE when creating a refund and persists that mode. SIMULATION updates coursework records only; no bank refund is sent. Existing gateway requests retain their original mode.',
   })
   @ApiBody({
     schema: {

@@ -57,11 +57,13 @@ Nguồn: [Danh sách thẻ kiểm thử chính thức VNPay](https://sandbox.vnp
 
 - Khách được hủy đơn của mình; admin được hủy đơn khách trong **2 phút từ `paidAt`**, thời điểm backend xác nhận thanh toán thành công. Đúng hoặc quá 2 phút, backend không nhận yêu cầu hủy mới. Đơn cũ đã quá hạn không được mở lại thời gian hủy.
 - Khách: mở chi tiết/hóa đơn → **Hủy đơn và hoàn tiền** → xác nhận. Admin: **Khách hàng → Xem đơn** rồi dùng cùng thao tác.
-- Hoàn toàn bộ số tiền đã trả sau khuyến mãi qua đúng cổng sandbox của giao dịch gốc. Hệ thống lưu payment gốc và giao dịch refund riêng; bấm lặp không tạo thêm yêu cầu đang xử lý.
-- Nếu cổng đang xử lý hoặc chưa xác minh được kết quả, đơn hiển thị **Đang hoàn tiền**. Chỉ khi cổng xác nhận thành công mới hiển thị **Đã hủy · Đã hoàn tiền**, hoàn kho theo định lượng đã trừ, hoàn điểm đổi thưởng và thu hồi điểm tích lũy của đơn.
-- Yêu cầu đã được tiếp nhận trong 2 phút vẫn tiếp tục đối soát sau hạn; nút **Kiểm tra hoàn tiền** không tạo yêu cầu hoàn mới. Cổng từ chối/timeout không được giả lập thành công.
+- Web đồ án có **hoàn tiền mô phỏng** khi server đặt `REFUND_MODE=simulation`. Hóa đơn ghi rõ **Hoàn tiền mô phỏng — không chuyển tiền qua ngân hàng**. Chỉ thao tác hoàn tiền được mô phỏng; thanh toán VNPay/ZaloPay vẫn dùng luồng sandbox hiện tại.
+- Trong chế độ mô phỏng, xác nhận hủy sẽ hoàn kho theo định lượng đã trừ, hoàn điểm đổi thưởng và thu hồi điểm tích lũy của đơn. Hóa đơn/lịch sử/admin có nhãn mô phỏng. Không có giao dịch ngân hàng hoàn tiền hoặc mã hoàn tiền ngân hàng; bấm lặp không hoàn kho/điểm thêm lần nữa.
+- Cấu hình mặc định của repo là `REFUND_MODE=gateway`: hoàn toàn bộ số tiền thực trả sau khuyến mãi qua đúng cổng sandbox gốc, chỉ cập nhật kho/điểm sau kết quả được xác minh. Timeout/lỗi cổng không được tự biến thành mô phỏng thành công.
+- Mỗi yêu cầu refund lưu riêng `mode` là `GATEWAY` hoặc `SIMULATION`. Bật mô phỏng không chuyển các yêu cầu cũ đang chờ qua cổng sang thành công. Hãy tạo đơn mới, thanh toán thành công rồi hủy trong 2 phút để thử chế độ mới.
+- Yêu cầu qua cổng đã được tiếp nhận trong 2 phút vẫn tiếp tục đối soát sau hạn; nút **Kiểm tra hoàn tiền** không tạo yêu cầu hoàn mới.
 - Nếu điểm tích lũy của đơn đã được dùng/giữ cho đơn khác, hệ thống vẫn hoàn tiền; phần điểm chưa thu hồi được ghi nhận để bù từ điểm tích lũy mua hàng tiếp theo. Đơn 0đ hoàn nguyên liệu/điểm, không gọi cổng thu/hoàn tiền.
 - Sau hoàn tiền, khách được gợi ý chọn đồ uống khác nhưng **vẫn được đặt lại món cũ** nếu còn nguyên liệu. Không vô hiệu hóa món và không tự thêm món bị hủy vào giỏ.
-- Để kiểm thử trọn luồng hoàn tiền, cần một giao dịch sandbox thành công rồi hủy trong hạn. Test tự động dùng phản hồi cổng giả lập để kiểm trạng thái/kho/điểm; việc API chưa trả kết quả cuối không phải bằng chứng tiền đã được hoàn.
+- Khi vấn đáp, phân biệt **hoàn tiền mô phỏng cho đồ án** với **hoàn tiền được cổng xác nhận**. Nhãn mô phỏng không phải bằng chứng tiền đã về tài khoản ngân hàng. Muốn chạy đầy đủ qua cổng, đặt lại `REFUND_MODE=gateway` và xác minh quyền/kết nối API với nhà cung cấp.
 
 File này chỉ chứa tài khoản demo và dữ liệu thẻ sandbox. Cấu hình SMTP, JWT, khóa ký cổng thanh toán, SSH key và tài khoản quản trị triển khai riêng được giữ ngoài GitHub.

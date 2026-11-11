@@ -20,6 +20,7 @@ import {
 import { VnpayGateway } from './vnpay.gateway.js';
 import { bankQrDetails, bankQrReceiver } from './bank-qr.js';
 import { ZalopayPaymentsService } from './zalopay-payments.service.js';
+import { configuredRefundMode } from './refund-mode.js';
 
 @Injectable()
 export class PaymentsService implements OnModuleInit, OnModuleDestroy {
@@ -51,6 +52,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       bankTransferDemoEnabled: this.bankTransferDemoEnabled(),
       bankQrConfigured: Boolean(bankQrReceiver()),
       cardDemoEnabled: false,
+      refundMode: configuredRefundMode(),
     };
   }
   private bankTransferDemoEnabled() {

@@ -34,7 +34,7 @@ export interface Order {
   orderCode: string;
   status: OrderStatus;
   paidAt: string | null;
-  refunds: { id: string; amount: string; reason: string; status: "PENDING" | "SUCCESS" | "FAILED"; providerRefundId: string | null; createdAt: string; updatedAt: string }[];
+  refunds: { id: string; amount: string; reason: string; status: "PENDING" | "SUCCESS" | "FAILED"; mode: "GATEWAY" | "SIMULATION"; providerRefundId: string | null; createdAt: string; updatedAt: string }[];
   createdAt: string;
   reservationExpiresAt: string;
   customerName: string;
@@ -139,6 +139,7 @@ export const orderService = {
       bankTransferDemoEnabled: boolean;
       cardDemoEnabled: boolean;
       bankQrConfigured: boolean;
+      refundMode: "GATEWAY" | "SIMULATION";
     }>("/payments/config"),
 };
 export const drinkPercent: Record<DrinkLevel, number> = {
