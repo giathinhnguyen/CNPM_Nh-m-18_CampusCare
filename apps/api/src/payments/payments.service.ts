@@ -53,6 +53,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       bankQrConfigured: Boolean(bankQrReceiver()),
       cardDemoEnabled: false,
       refundMode: configuredRefundMode(),
+      refundModes: { VNPAY: configuredRefundMode('VNPAY'), ZALOPAY: configuredRefundMode('ZALOPAY') },
     };
   }
   private bankTransferDemoEnabled() {

@@ -140,6 +140,7 @@ export const orderService = {
       cardDemoEnabled: boolean;
       bankQrConfigured: boolean;
       refundMode: "GATEWAY" | "SIMULATION";
+      refundModes?: { VNPAY: "GATEWAY" | "SIMULATION"; ZALOPAY: "GATEWAY" | "SIMULATION" };
     }>("/payments/config"),
 };
 export const drinkPercent: Record<DrinkLevel, number> = {

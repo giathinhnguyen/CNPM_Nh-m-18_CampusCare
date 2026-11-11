@@ -108,6 +108,8 @@ describe('Paid-order cancellation and full refunds', () => {
   }
   beforeEach(() => {
     vi.stubEnv('REFUND_MODE', 'gateway');
+    vi.stubEnv('VNPAY_REFUND_MODE', '');
+    vi.stubEnv('ZALOPAY_REFUND_MODE', '');
     vi.stubEnv('VNPAY_TMN_CODE', 'TESTONLY');
     vi.stubEnv('VNPAY_HASH_SECRET', 'test-only');
     vi.stubEnv('ZALOPAY_APP_ID', '1234');
@@ -391,6 +393,35 @@ describe('Paid-order cancellation and full refunds', () => {
       expect(queryMock).not.toHaveBeenCalled();
     },
   );
+  it('routes ZaloPay refunds to the wallet gateway while VNPay uses simulation', async () => {
+    const f = await paid('ZALOPAY');
+    vi.stubEnv('REFUND_MODE', 'simulation');
+    vi.stubEnv('VNPAY_REFUND_MODE', 'simulation');
+    vi.stubEnv('ZALOPAY_REFUND_MODE', 'gateway');
+    submitMock.mockResolvedValue({ state: 'PENDING', code: 'ZALO:1:1' });
+    const result = await refunds.request(f.customer.id, f.order.id, {});
+    expect(result.status).toBe('REFUND_PENDING');
+    expect(result.inventoryStatus).toBe('DEDUCTED');
+    expect(result.refunds[0].mode).toBe('GATEWAY');
+    expect(submitMock).toHaveBeenCalledTimes(1);
+    queryMock.mockResolvedValue({
+      state: 'SUCCESS',
+      code: 'ZALO:1:1',
+      providerRefundId: '12345',
+    });
+    expect((await refunds.reconcile(f.customer.id, f.order.id)).status).toBe(
+      'REFUNDED',
+    );
+    const card = await paid('VNPAY');
+    const simulated = await refunds.request(
+      card.customer.id,
+      card.order.id,
+      {},
+    );
+    expect(simulated.status).toBe('REFUNDED');
+    expect(simulated.refunds[0].mode).toBe('SIMULATION');
+    expect(submitMock).toHaveBeenCalledTimes(1);
+  });
   it('does not convert an existing uncertain gateway refund when simulation is enabled later', async () => {
     const f = await paid();
     submitMock.mockResolvedValue({ state: 'PENDING', code: 'WAIT' });

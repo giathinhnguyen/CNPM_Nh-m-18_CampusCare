@@ -14,7 +14,7 @@ export class RefundsController {
     summary:
       'Customer owner or administrator: cancel and fully refund within 2 minutes of paidAt',
     description:
-      'The server selects GATEWAY or SIMULATION from REFUND_MODE when creating a refund and persists that mode. SIMULATION updates coursework records only; no bank refund is sent. Existing gateway requests retain their original mode.',
+      'The server selects GATEWAY or SIMULATION from VNPAY_REFUND_MODE or ZALOPAY_REFUND_MODE, falling back to REFUND_MODE, and persists it. SIMULATION does not send a bank refund. Existing requests retain their original mode.',
   })
   @ApiBody({
     schema: {

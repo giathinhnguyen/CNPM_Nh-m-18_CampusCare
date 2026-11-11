@@ -76,7 +76,7 @@ export interface AdminData {
   categories: { id: string; name: string }[];
 }
 export interface CustomerOrder {
-  payments: { transactionId: string | null; status: string }[];
+  payments: { transactionId: string | null; status: string; paymentMethod: string }[];
   id: string;
   orderCode: string;
   status: Order["status"];

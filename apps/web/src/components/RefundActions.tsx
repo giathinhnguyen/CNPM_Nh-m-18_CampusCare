@@ -6,7 +6,7 @@ import { formatCurrency } from "../lib/utils";
 type RefundableOrder = Pick<
   Order,
   "id" | "status" | "paidAt" | "refunds" | "finalAmount"
->;
+> & { payments: { status: string; paymentMethod: string }[] };
 export default function RefundActions({
   order,
   onUpdated,
@@ -32,18 +32,20 @@ export default function RefundActions({
   const pending = order.status === "REFUND_PENDING";
   const refunded = order.status === "REFUNDED";
   const latest = order.refunds?.[0];
+  const paymentMethod = order.payments.find(payment => payment.status === "SUCCESS")?.paymentMethod;
   const simulated = order.status === "PAID" ? configuredMode === "SIMULATION" && Number(order.finalAmount) > 0 : latest?.mode === "SIMULATION";
   useEffect(() => {
     if (order.status !== "PAID" || deadline <= Date.now()) return;
     let active = true;
     setConfiguredMode(null);
     void orderService.config().then(config => {
-      if (active) setConfiguredMode(config.refundMode ?? "GATEWAY");
+      const mode = paymentMethod === "VNPAY" || paymentMethod === "ZALOPAY" ? config.refundModes?.[paymentMethod] : undefined;
+      if (active) setConfiguredMode(mode ?? config.refundMode ?? "GATEWAY");
     }).catch(() => {
       if (active) setError("Chưa tải được chế độ hoàn tiền. Vui lòng tải lại trang.");
     });
     return () => { active = false; };
-  }, [order.id, order.status, deadline]);
+  }, [order.id, order.status, deadline, paymentMethod]);
   useEffect(() => {
     if (order.status !== "PAID" || deadline <= Date.now()) return;
     const timer = window.setInterval(() => {
@@ -126,7 +128,7 @@ export default function RefundActions({
     <div className="mt-5 space-y-3 border-t border-[#eee6df] pt-4">
       {error && <InlineNotice type="error">{error}</InlineNotice>}
       {simulated && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
-        Hoàn tiền mô phỏng cho đồ án. Không chuyển tiền qua ngân hàng.
+        Hoàn tiền mô phỏng
       </p>}
       {refunded ? (
         <>
@@ -147,7 +149,7 @@ export default function RefundActions({
       ) : pending ? (
         <>
           <p className="text-sm text-[#80654c]">
-            {simulated ? "Đang xử lý hủy đơn và hoàn tiền mô phỏng " : "Đã tiếp nhận yêu cầu trong thời hạn. Cổng thanh toán đang xử lý hoàn "}
+            {simulated ? "Đang xử lý hủy đơn và hoàn tiền mô phỏng " : "Đã nhận yêu cầu hủy trong thời hạn. Đang chờ xác nhận hoàn "}
             {formatCurrency(Number(latest?.amount ?? order.finalAmount))}. Kho
             và điểm sẽ cập nhật sau khi có kết quả xác nhận.
           </p>
@@ -177,7 +179,7 @@ export default function RefundActions({
                 <div className="space-y-3 rounded-2xl bg-[#f7f3ee] p-4">
                   <p className="text-sm">
                     {simulated ? "Xác nhận hủy và mô phỏng hoàn toàn bộ " : "Xác nhận hủy và hoàn toàn bộ "}
-                    {formatCurrency(Number(order.finalAmount))}{simulated ? "? Không chuyển tiền qua ngân hàng." : " qua cổng thanh toán?"} Điểm tích lũy từ đơn này sẽ được thu hồi.
+                    {formatCurrency(Number(order.finalAmount))}{simulated ? "?" : " qua cổng thanh toán?"} Điểm tích lũy từ đơn này sẽ được thu hồi.
                   </p>
                   <label className="block text-sm">
                     Lý do hủy (không bắt buộc)

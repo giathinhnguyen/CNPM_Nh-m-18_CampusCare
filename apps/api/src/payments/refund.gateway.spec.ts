@@ -81,16 +81,14 @@ it.each(['05', '06'])(
 it('keeps the real unsigned VNPay sandbox 99 reply unverified instead of declaring a refund complete or rejected', async () => {
   vi.stubGlobal(
     'fetch',
-    vi
-      .fn()
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            vnp_ResponseCode: '99',
-            vnp_Message: 'Unexpected error',
-          }),
-        ),
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          vnp_ResponseCode: '99',
+          vnp_Message: 'Unexpected error',
+        }),
       ),
+    ),
   );
   await expect(gateway.submit(request)).rejects.toMatchObject({
     code: 'VNPAY_UNVERIFIED_99',
@@ -180,6 +178,25 @@ it('keeps ZaloPay not-found query uncertain instead of submitting a second refun
     payment: { ...request.payment, paymentMethod: 'ZALOPAY' },
   };
   expect((await gateway.query(input)).state).toBe('PENDING');
+});
+it('records an HTTP 403 denied ZaloPay submission as rejected, while a denied query remains uncertain', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockImplementation(() =>
+        Promise.resolve(new Response('Permission Denied', { status: 403 })),
+      ),
+  );
+  const input = {
+    ...request,
+    payment: { ...request.payment, paymentMethod: 'ZALOPAY' },
+  };
+  expect(await gateway.submit(input)).toMatchObject({
+    state: 'FAILED',
+    code: 'ZALO:HTTP403',
+  });
+  await expect(gateway.query(input)).rejects.toThrow();
 });
 it('retains a ZaloPay queued refund rather than showing an accepted request as complete', async () => {
   vi.stubGlobal(

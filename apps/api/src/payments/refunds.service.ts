@@ -116,7 +116,7 @@ export class RefundsService implements OnModuleInit, OnModuleDestroy {
           );
         const mode = order.finalAmount.isZero()
           ? 'GATEWAY'
-          : configuredRefundMode();
+          : configuredRefundMode(payment?.paymentMethod);
         if (!order.finalAmount.isZero() && mode === 'GATEWAY')
           this.gateway.assertConfigured(payment.paymentMethod);
         const id = randomUUID();

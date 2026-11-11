@@ -93,7 +93,7 @@ export class AdminService {
         paidAt: true,
         refunds: { select: { id: true, amount: true, reason: true, status: true, mode: true, providerRefundId: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'desc' } },
         finalAmount: true,
-        payments: { select: { transactionId: true, status: true } },
+        payments: { select: { transactionId: true, status: true, paymentMethod: true } },
         createdAt: true,
         items: { select: { productName: true, quantity: true } },
       },

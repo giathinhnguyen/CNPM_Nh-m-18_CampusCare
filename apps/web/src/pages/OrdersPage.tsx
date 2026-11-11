@@ -185,7 +185,7 @@ export default function OrdersPage() {
     >
       {detail && ["REFUND_PENDING", "REFUNDED"].includes(orders[0]?.status) ? (
         <PageTitle eyebrow="Đơn hàng của bạn" title={orders[0].status === "REFUNDED" ? isSimulatedRefund(orders[0]) ? "Đơn đã hủy · Hoàn tiền mô phỏng" : "Đơn đã hủy và hoàn tiền" : "Đang xử lý hoàn tiền"}
-          description={isSimulatedRefund(orders[0]) ? "Chế độ đồ án: không chuyển tiền qua ngân hàng. Mời bạn chọn một đồ uống khác." : orders[0].status === "REFUNDED" ? "Mời bạn quay lại menu chọn đồ uống yêu thích." : "Yêu cầu hủy đã được tiếp nhận. Kết quả sẽ cập nhật khi cổng xác nhận."} />
+          description={orders[0].status === "REFUNDED" ? "Mời bạn quay lại menu chọn đồ uống yêu thích." : "Yêu cầu hủy đã được tiếp nhận. Kết quả sẽ cập nhật khi cổng xác nhận."} />
       ) : confirmed ? (
         <div className="mb-8 rounded-[2rem] bg-[#e4eee1] px-6 py-10 text-center">
           <CheckCircle2 size={48} className="mx-auto text-[#527155]" />
