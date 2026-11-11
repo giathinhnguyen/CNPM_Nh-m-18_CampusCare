@@ -25,3 +25,16 @@ pnpm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# Local deployment state, server keys and environment files
+.deployment/
+
+# Local investigation notes, browser artifacts and report generators
+/.playwright-mcp/
+/BREWLITE_WORK_PLAN.md
+/docs/CHUAN_BI_VNPAY.md
+/docs/ON_TAP_PAYMENT.md
+/docs/TAI_KHOAN_TEST.md
+/docs/create_bug_report.py
+/docs/update_bug_report.py
+/docs/lint-review.json

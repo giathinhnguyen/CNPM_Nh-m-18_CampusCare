@@ -297,7 +297,7 @@
                 "value": "application/json"
               }
             ],
-            "url": "{{baseUrl}}/orders/{{orderId}}/cancel",
+            "url": "{{baseUrl}}/payments/orders/{{orderId}}/cancel",
             "body": {
               "mode": "raw",
               "raw": "{}",
@@ -306,7 +306,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "Safely cancels a pending ZaloPay QR through the provider before restoring cart and releasing stock. A paid payment is never cancelled locally."
           },
           "event": [
             {
@@ -365,7 +366,7 @@
           ]
         },
         {
-          "name": "Reconcile with VNPay",
+          "name": "Reconcile with VNPay or ZaloPay",
           "request": {
             "method": "POST",
             "header": [
@@ -415,6 +416,134 @@
               }
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "ZaloPay QR sandbox - manual scenario",
+      "item": [
+        {
+          "name": "Create ZaloPay QR checkout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/payments",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"idempotencyKey\": \"{{paymentKey}}\",\n  \"channel\": \"zalopay\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Uses ZaloPay sandbox keys. The QR is displayed on the owned order page. Use a separate unpaid order; callback URL is optional locally because server query is supported."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('paymentKey')) pm.collectionVariables.set('paymentKey', pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Created', () => pm.response.to.have.status(201));",
+                  "pm.test('ZaloPay sandbox URL', () => pm.expect(['sbgateway.zalopay.vn','qcgateway.zalopay.vn']).to.include(new URL(pm.response.json().paymentUrl).hostname));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject forged ZaloPay callback without JWT",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/payments/zalopay/callback",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Callback rejected', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().return_code).to.eql(2); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject unsigned ZaloPay browser result",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "noauth"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/payments/zalopay/result",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Unsigned result rejected', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get owned ZaloPay QR",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/payments/orders/{{orderId}}/zalopay-qr"
+          }
         }
       ]
     },

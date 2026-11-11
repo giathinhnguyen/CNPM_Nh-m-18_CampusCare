@@ -51,6 +51,7 @@ export class AuthService {
         fullName: true,
         role: true,
         loyaltyPoints: true,
+        loyaltyDebt: true,
         passwordHash: true,
       },
     });
@@ -85,6 +86,7 @@ export class AuthService {
         fullName: user.fullName,
         role: user.role,
         loyaltyPoints: user.loyaltyPoints,
+        loyaltyDebt: user.loyaltyDebt,
         hasPassword: !!user.passwordHash,
       },
     };
@@ -98,6 +100,7 @@ export class AuthService {
         fullName: true,
         role: true,
         loyaltyPoints: true,
+        loyaltyDebt: true,
         passwordHash: true,
       },
     });
@@ -257,6 +260,7 @@ export class AuthService {
         fullName: user.fullName,
         role: user.role,
         loyaltyPoints: user.loyaltyPoints,
+        loyaltyDebt: user.loyaltyDebt,
         hasPassword: !!user.passwordHash,
       },
     };

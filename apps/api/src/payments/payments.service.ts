@@ -19,6 +19,7 @@ import {
 } from '../rewards/reward-transactions.js';
 import { VnpayGateway } from './vnpay.gateway.js';
 import { bankQrDetails, bankQrReceiver } from './bank-qr.js';
+import { ZalopayPaymentsService } from './zalopay-payments.service.js';
 
 @Injectable()
 export class PaymentsService implements OnModuleInit, OnModuleDestroy {
@@ -29,11 +30,12 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly orders: OrdersService,
     private readonly gateway: VnpayGateway,
+    private readonly zalopay: ZalopayPaymentsService,
   ) {}
   onModuleInit() {
     this.timer = setInterval(() => {
       void this.expireOrders();
-    }, 60000);
+    }, 15000);
     this.timer.unref();
   }
   onModuleDestroy() {
@@ -44,6 +46,8 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       provider: 'VNPAY',
       sandbox: true,
       configured: this.gateway.configured(),
+      zalopayConfigured: this.zalopay.configured(),
+      zalopaySandbox: true,
       bankTransferDemoEnabled: this.bankTransferDemoEnabled(),
       bankQrConfigured: Boolean(bankQrReceiver()),
       cardDemoEnabled: false,
@@ -203,10 +207,11 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     if (
       !isUuid(input.orderId) ||
       !isUuid(input.idempotencyKey) ||
-      input.channel !== 'card'
+      (input.channel !== 'card' && input.channel !== 'zalopay')
     )
       throw new BadRequestException('Yêu cầu thanh toán không hợp lệ');
     const orderId = input.orderId.toLowerCase();
+    if (input.channel === 'zalopay') return this.zalopay.create(userId, orderId, input.idempotencyKey.toLowerCase());
     const idempotencyKey = `${userId}:${input.idempotencyKey.toLowerCase()}`;
     return this.prisma.$transaction(async (tx) => {
       await lockCustomer(tx, userId);
@@ -236,6 +241,8 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       const pending = await tx.payment.findFirst({
         where: { orderId, status: 'PENDING' },
       });
+      if (pending && pending.paymentMethod !== 'VNPAY')
+        throw new ConflictException('Đơn đang có giao dịch tại ZaloPay. Hãy kiểm tra kết quả trước.');
       if (pending)
         return {
           id: pending.id,
@@ -380,6 +387,7 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
 
   async reconcile(userId: string, orderId: string) {
     const order = await this.orders.owned(userId, orderId);
+    await this.zalopay.reconcile(userId, orderId);
     const payments = await this.prisma.payment.findMany({
       where: { orderId, status: 'PENDING', paymentMethod: 'VNPAY' },
     });
@@ -400,6 +408,16 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
     return this.orders.owned(userId, orderId);
   }
 
+  async cancel(userId: string, orderId: string) {
+    const initial = await this.orders.owned(userId, orderId);
+    if (['CANCELLED', 'EXPIRED'].includes(initial.status)) return initial;
+    if (initial.status === 'PAID') throw new ConflictException('Đơn đã thanh toán không thể hủy.');
+    await this.zalopay.cancelPending(userId, orderId);
+    const order = await this.reconcile(userId, orderId);
+    if (['PAID', 'EXPIRED', 'CANCELLED'].includes(order.status)) return order;
+    return this.orders.cancel(userId, orderId, order.reservationExpiresAt <= new Date());
+  }
+
   async expireOrders() {
     if (this.running) return;
     this.running = true;
@@ -407,17 +425,22 @@ export class PaymentsService implements OnModuleInit, OnModuleDestroy {
       const orders = await this.prisma.order.findMany({
         where: {
           status: { in: ['PENDING_PAYMENT', 'PAYMENT_FAILED'] },
-          reservationExpiresAt: { lt: new Date() },
+          OR: [
+            { reservationExpiresAt: { lt: new Date() } },
+            { payments: { some: { paymentMethod: 'ZALOPAY', status: 'PENDING' } } },
+          ],
         },
         take: 50,
         orderBy: { reservationExpiresAt: 'asc' },
       });
-      for (const order of orders) {
-        try {
-          await this.reconcile(order.userId, order.id);
-        } catch {
-          this.logger.warn(`Order ${order.id} remains pending reconciliation`);
-        }
+      for (let offset = 0; offset < orders.length; offset += 4) {
+        await Promise.all(orders.slice(offset, offset + 4).map(async order => {
+          try {
+            await this.reconcile(order.userId, order.id);
+          } catch {
+            this.logger.warn(`Order ${order.id} remains pending reconciliation`);
+          }
+        }));
       }
     } catch {
       this.logger.warn('Could not reconcile expired orders');

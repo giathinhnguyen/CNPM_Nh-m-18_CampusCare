@@ -33,6 +33,8 @@ export interface Order {
   id: string;
   orderCode: string;
   status: OrderStatus;
+  paidAt: string | null;
+  refunds: { id: string; amount: string; reason: string; status: "PENDING" | "SUCCESS" | "FAILED"; providerRefundId: string | null; createdAt: string; updatedAt: string }[];
   createdAt: string;
   reservationExpiresAt: string;
   customerName: string;
@@ -92,6 +94,8 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
   return data as T;
 }
 export const orderService = {
+  refund: (id: string, reason: string) => request<Order>(`/payments/orders/${encodeURIComponent(id)}/refund`, { reason }),
+  reconcileRefund: (id: string) => request<Order>(`/payments/orders/${encodeURIComponent(id)}/refund/reconcile`, {}),
   create: (body: unknown) => request<Order>("/orders", body),
   list: () => request<Order[]>("/orders"),
   forPayment: (id: string) =>
@@ -100,7 +104,7 @@ export const orderService = {
     request<Order>("/payments/vnpay/return", params),
   get: (id: string) => request<Order>(`/orders/${encodeURIComponent(id)}`),
   cancel: (id: string) =>
-    request<Order>(`/orders/${encodeURIComponent(id)}/cancel`, {}),
+    request<Order>(`/payments/orders/${encodeURIComponent(id)}/cancel`, {}),
   reconcile: (id: string) =>
     request<Order>(`/payments/orders/${encodeURIComponent(id)}/reconcile`, {}),
   confirmBankTransferDemo: (id: string) =>
@@ -118,6 +122,9 @@ export const orderService = {
     request<BankQrDetails>(
       `/payments/orders/${encodeURIComponent(id)}/bank-qr`,
     ),
+  zalopayQr: (id: string) => request<{ qrDataUrl: string; paymentUrl: string; amount: string; expiresAt: string }>(
+    `/payments/orders/${encodeURIComponent(id)}/zalopay-qr`,
+  ),
   failBankTransferDemo: (id: string, idempotencyKey: string) =>
     request<Order>(
       `/payments/orders/${encodeURIComponent(id)}/bank-transfer-demo/fail`,
@@ -127,6 +134,8 @@ export const orderService = {
   config: () =>
     request<{
       configured: boolean;
+      zalopayConfigured: boolean;
+      zalopaySandbox: boolean;
       bankTransferDemoEnabled: boolean;
       cardDemoEnabled: boolean;
       bankQrConfigured: boolean;

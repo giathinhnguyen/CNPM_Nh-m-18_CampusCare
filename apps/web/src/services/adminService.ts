@@ -1,4 +1,5 @@
 import { authenticatedFetch } from "./session";
+import type { Order } from "./orderService";
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:3000/api";
 export interface AdminUser {
   id: string;
@@ -78,7 +79,9 @@ export interface CustomerOrder {
   payments: { transactionId: string | null; status: string }[];
   id: string;
   orderCode: string;
-  status: string;
+  status: Order["status"];
+  paidAt: string | null;
+  refunds: Order["refunds"];
   finalAmount: string;
   createdAt: string;
   items: { productName: string; quantity: number }[];

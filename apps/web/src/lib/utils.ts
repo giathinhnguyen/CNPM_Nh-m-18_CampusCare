@@ -53,6 +53,8 @@ export const statusLabels: Record<OrderStatus, string> = {
   PAID: "Đã thanh toán",
   CANCELLED: "Đã hủy",
   EXPIRED: "Hết hạn thanh toán",
+  REFUND_PENDING: "Đang hoàn tiền",
+  REFUNDED: "Đã hủy · Đã hoàn tiền",
 };
 
 export const cx = (

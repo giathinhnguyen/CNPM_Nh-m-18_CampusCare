@@ -1,4 +1,10 @@
 import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
+import { ApiRequestBody } from '../swagger/request-bodies.js';
+import {
   Body,
   Controller,
   Delete,
@@ -15,7 +21,10 @@ import type { AddToCartDto, UpdateQuantityDto } from '../carts/carts.dto.js';
 import { RewardsCartService } from './rewards-cart.service.js';
 import { validateObject } from './reward-transactions.js';
 
+@ApiTags('rewards/cart')
 @Controller('rewards/cart')
+@ApiBearerAuth()
+@ApiUnauthorizedResponse({ description: 'JWT required, invalid or expired.' })
 @UseGuards(AuthGuard)
 export class RewardsCartController {
   constructor(private readonly cart: RewardsCartService) {}
@@ -25,17 +34,20 @@ export class RewardsCartController {
     return this.cart.getCart(req.user.id);
   }
 
+  @ApiRequestBody('cartQuote')
   @Post('quote')
   @HttpCode(200)
   quote(@Req() req: AuthenticatedRequest, @Body() body: unknown) {
     return this.cart.quote(req.user.id, body);
   }
 
+  @ApiRequestBody('cartItem')
   @Post('items')
   addItem(@Req() req: AuthenticatedRequest, @Body() body: AddToCartDto) {
     return this.cart.addToCart(req.user.id, body);
   }
 
+  @ApiRequestBody('updateCart')
   @Patch('items/:id')
   updateItem(
     @Req() req: AuthenticatedRequest,
@@ -61,6 +73,7 @@ export class RewardsCartController {
     return this.cart.removeItem(req.user.id, id);
   }
 
+  @ApiRequestBody('cartSync')
   @Post('sync')
   @HttpCode(200)
   syncCart(@Req() req: AuthenticatedRequest, @Body() body: unknown) {

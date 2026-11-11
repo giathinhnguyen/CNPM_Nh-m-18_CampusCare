@@ -1,15 +1,24 @@
-# Kiểm thử Payment — 04/11/2026
+# Kiểm thử Payment — ZaloPay, 10/11/2026
+
+Giao diện hiện dùng **ZaloPay QR sandbox và thẻ nội địa VNPay sandbox**. Xem [CHUAN_BI_ZALOPAY.md](CHUAN_BI_ZALOPAY.md) để cài ví sandbox và cấu hình test local. Các mục demo ngân hàng bên dưới chỉ dành cho API tương thích cũ.
 
 ## Kết quả chạy lại
 
-- Backend: 63/63 unit tests đạt; 41/41 integration tests đạt (15 test checkout/kho/thanh toán).
+- Sửa hết hạn/hủy ngày 10/11: 19/19 test gateway ZaloPay, 55/55 integration tests đạt. Đã tái hiện trước sửa: phản hồi `return_code=2, sub_return_code=-54, is_processing=true` giữ đơn PENDING; sau sửa chuyển EXPIRED và hoàn phần giữ kho.
+- Đã đối soát lại đơn `BL91516742D74D4D208892` trong ảnh và đơn ZaloPay quá hạn còn lại: EXPIRED, inventory RELEASED, payment FAILED. Không ép trạng thái bằng SQL.
+- API `/v2/cancel` đã xác nhận hủy thành công trên giao dịch sandbox test riêng. Nút hủy website đi qua `/api/payments/orders/:id/cancel`; hủy màn hình ví không tự hủy QR.
+- Kiểm tra trình duyệt với API giả lập: nội dung QR gọn, nút hủy khi ZaloPay đang chờ bấm được; lịch sử tự chuyển sang hết hạn mà không reload, bộ lọc hết hạn hiển thị đúng.
+
+- Backend mới nhất (10/11): 86/86 unit tests đạt khi chạy vitest với testTimeout=15000, maxWorkers=1; 55/55 integration tests đạt. Cấu hình giới hạn worker tránh test auth timeout khi máy chạy nhiều tiến trình.
 - Frontend: 23/23 tests đạt. Build API và web thành công.
-- Giao diện đã kiểm tra với API giả lập: thành công/thất bại về hóa đơn; đang chờ/cần đối soát ở lại trang kết quả. Đây không phải giao dịch VNPay sandbox thực tế.
-- Lint toàn API vẫn chưa đạt: `src/main.ts` gọi `bootstrap()` không xử lý Promise; còn cảnh báo ở giỏ hàng và test. Cảnh báo ép kiểu chữ ký trong gateway đã sửa bằng kiểm tra kiểu string.
+- API sandbox ZaloPay thật đã tạo được link bằng tài khoản test mẫu chính thức; chưa hoàn tất quét trên điện thoại.
+- Gateway chạy trong Docker đã gọi create/query sandbox thật: tạo được URL `qcgateway.zalopay.vn`, query trả PENDING (`return_code=3`). Lint các file thanh toán thay đổi đạt. Postman có thêm create/callback/QR ZaloPay.
+- Giao diện đã kiểm tra với API giả lập: checkout ZaloPay hiển thị QR tại hóa đơn và tự xác nhận qua query; checkout thẻ vẫn chuyển đúng VNPay; redirect thành công/thất bại về hóa đơn, kết quả đang chờ ở lại trang kết quả. Kiểm tra này không thay thế thao tác quét trên điện thoại.
+- Lint toàn API mới nhất: 0 lỗi sau khi xử lý Promise bootstrap; còn cảnh báo ở giỏ hàng và test. Docker production đã qua migration, seed mới, health check, đăng nhập admin và tải Swagger; xem DEPLOY_AWS.md.
 
 ## Những điểm cần biết khi nhóm test
 
-1. Chỉ có QR chuyển khoản mô phỏng và thẻ nội địa VNPay sandbox. Nút xác nhận chuyển khoản không xác minh giao dịch ngân hàng thật.
+1. Checkout/đơn hàng dùng ZaloPay QR sandbox và thẻ nội địa VNPay sandbox. API chuyển khoản mô phỏng cũ vẫn được giữ và không xác minh ngân hàng thật.
 2. Máy local chưa có IPN công khai. Nếu đóng trang VNPay trước khi quay về, hệ thống phụ thuộc QueryDR; trước đây sandbox trả lỗi 99, nên đơn có thể tiếp tục chờ đối soát. Chưa xác nhận dịch vụ này đã hoạt động lại bằng giao dịch thực tế.
 3. Return có chữ ký hợp lệ xử lý trực tiếp thành công và hủy (mã 24). Các lỗi VNPay khác đi qua đối soát, nên có thể chưa hiện thất bại ngay khi QueryDR lỗi.
 4. Thất bại giữ nguyên liệu đến hạn giữ đơn để thử lại; món được trả lại giỏ khi hủy/hết hạn, không ngay lúc thất bại. Cần thống nhất điều này nếu yêu cầu môn học đòi giữ giỏ ngay khi thất bại.
@@ -28,11 +37,11 @@ docker compose restart api
 docker compose exec -T api pnpm --filter api test:e2e
 ```
 
-Các test tích hợp tạo dữ liệu riêng rồi dọn dẹp; chạy trên database phát triển/test. `.env` phải tự cấu hình theo `.env.example`; không lấy merchant secret hoặc JWT secret từ GitHub. Bật `BANK_TRANSFER_DEMO_ENABLED=true` cho môi trường development; sửa biến môi trường thì chạy `docker compose up -d --force-recreate api`. VNPay cần mã merchant, hash secret riêng và Return URL đúng origin web đang dùng.
+Các test tích hợp tạo dữ liệu riêng rồi dọn dẹp; chạy trên database phát triển/test. `.env` phải tự cấu hình theo `.env.example`; không lấy khóa thật hoặc JWT secret từ GitHub. Các API demo cũ cần `BANK_TRANSFER_DEMO_ENABLED=true` trong development. ZaloPay dùng App ID/Key1/Key2 sandbox; query dùng được trên local trước khi có callback công khai. Xem `CHUAN_BI_ZALOPAY.md`. Sau khi sửa biến môi trường, chạy `docker compose up -d --force-recreate api`. VNPay cần mã merchant, hash secret riêng và Return URL đúng origin web đang dùng.
 
 ## Test API bằng Postman
 
-Import `docs/api/BrewLite-Payment.postman_collection.json`. Collection dùng `http://localhost:3000/api`; chưa tích hợp Swagger nên không có trang `/api/docs` từ bộ này.
+Import `docs/api/BrewLite-Payment.postman_collection.json`. Collection dùng `http://localhost:3000/api`. Swagger hiện có trong bản local development tại `/api/docs`, xem `docs/api/SWAGGER.md`.
 
 1. Trong Variables, điền `email`, `password` của tài khoản khách test ở máy bạn. Gửi **Login**; token được lưu tự động vào collection local. Không export/chia sẻ token hay mật khẩu đã điền.
 2. Gửi **Current user**, **Payment config**, **List orders** để kiểm tra phiên đăng nhập và cấu hình.
