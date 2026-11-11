@@ -78,6 +78,24 @@ it.each(['05', '06'])(
     expect((await gateway.submit(request)).state).toBe('PENDING');
   },
 );
+it('keeps the real unsigned VNPay sandbox 99 reply unverified instead of declaring a refund complete or rejected', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            vnp_ResponseCode: '99',
+            vnp_Message: 'Unexpected error',
+          }),
+        ),
+      ),
+  );
+  await expect(gateway.submit(request)).rejects.toMatchObject({
+    code: 'VNPAY_UNVERIFIED_99',
+  });
+});
 it.each(['signature', 'amount', 'merchant', 'reference'])(
   'rejects an invalid VNPay refund %s',
   async (kind) => {
@@ -94,13 +112,11 @@ it.each(['signature', 'amount', 'merchant', 'reference'])(
   },
 );
 it('never confuses a successful original payment or a partial refund with a successful full refund', async () => {
-  const query = vi
-    .spyOn(vnpay, 'query')
-    .mockResolvedValue({
-      ...receipt(),
-      vnp_Command: 'querydr',
-      vnp_TransactionType: '01',
-    });
+  const query = vi.spyOn(vnpay, 'query').mockResolvedValue({
+    ...receipt(),
+    vnp_Command: 'querydr',
+    vnp_TransactionType: '01',
+  });
   expect((await gateway.query(request)).state).toBe('PENDING');
   query.mockResolvedValue({
     ...receipt(),
@@ -168,17 +184,15 @@ it('keeps ZaloPay not-found query uncertain instead of submitting a second refun
 it('retains a ZaloPay queued refund rather than showing an accepted request as complete', async () => {
   vi.stubGlobal(
     'fetch',
-    vi
-      .fn()
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            return_code: 1,
-            refund_status: 3,
-            refund_id: 12345,
-          }),
-        ),
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          return_code: 1,
+          refund_status: 3,
+          refund_id: 12345,
+        }),
       ),
+    ),
   );
   expect(
     (

@@ -18,6 +18,7 @@ import {
   validateObject,
 } from '../rewards/reward-transactions.js';
 import { RefundGateway, type RefundResult } from './refund.gateway.js';
+import { VnpayGatewayError } from './vnpay.gateway.js';
 
 export const REFUND_WINDOW_MS = 120000;
 
@@ -181,9 +182,26 @@ export class RefundsService implements OnModuleInit, OnModuleDestroy {
           ? await this.gateway.submit(request)
           : await this.gateway.query(request);
       await this.apply(id, result);
-    } catch {
+    } catch (error) {
       // Never turn a timeout, malformed receipt, DB failure or unknown reply into a new refund.
-      this.logger.warn(`Refund ${id} awaits reconciliation`);
+      const code =
+        error instanceof VnpayGatewayError
+          ? error.code
+          : 'REFUND_PROCESSING_ERROR';
+      try {
+        await this.prisma.refund.updateMany({
+          where: { id, status: 'PENDING' },
+          data: {
+            rawResponse: {
+              code,
+              stage: claim.count === 1 ? 'submit' : 'query',
+            },
+          },
+        });
+      } catch {
+        // A local persistence failure must not trigger another money instruction.
+      }
+      this.logger.warn(`Refund ${id} awaits reconciliation (${code})`);
     }
   }
   private async apply(id: string, result: RefundResult) {

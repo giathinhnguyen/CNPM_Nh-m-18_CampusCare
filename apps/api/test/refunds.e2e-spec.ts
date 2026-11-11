@@ -21,7 +21,10 @@ import { PromotionsService } from '../src/promotions/promotions.service.js';
 import { RefundGateway } from '../src/payments/refund.gateway.js';
 import { RefundsService } from '../src/payments/refunds.service.js';
 import { RefundsController } from '../src/payments/refunds.controller.js';
-import { VnpayGateway } from '../src/payments/vnpay.gateway.js';
+import {
+  VnpayGateway,
+  VnpayGatewayError,
+} from '../src/payments/vnpay.gateway.js';
 import { lockCustomer } from '../src/rewards/reward-transactions.js';
 import { recipeFixture } from './inventory-fixture.js';
 
@@ -108,20 +111,16 @@ describe('Paid-order cancellation and full refunds', () => {
     vi.stubEnv('VNPAY_HASH_SECRET', 'test-only');
     vi.stubEnv('ZALOPAY_APP_ID', '1234');
     vi.stubEnv('ZALOPAY_KEY1', 'test-only');
-    submitMock = vi
-      .spyOn(gateway, 'submit')
-      .mockResolvedValue({
-        state: 'SUCCESS',
-        code: 'TEST',
-        providerRefundId: '1234567',
-      });
-    queryMock = vi
-      .spyOn(gateway, 'query')
-      .mockResolvedValue({
-        state: 'SUCCESS',
-        code: 'TEST',
-        providerRefundId: '1234567',
-      });
+    submitMock = vi.spyOn(gateway, 'submit').mockResolvedValue({
+      state: 'SUCCESS',
+      code: 'TEST',
+      providerRefundId: '1234567',
+    });
+    queryMock = vi.spyOn(gateway, 'query').mockResolvedValue({
+      state: 'SUCCESS',
+      code: 'TEST',
+      providerRefundId: '1234567',
+    });
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -301,6 +300,41 @@ describe('Paid-order cancellation and full refunds', () => {
       (await prisma.user.findUniqueOrThrow({ where: { id: f.customer.id } }))
         .loyaltyPoints,
     ).toBe(550);
+  });
+  it('retains safe gateway diagnostics while keeping uncertain refunds pending and never resubmitting', async () => {
+    const f = await paid();
+    submitMock.mockRejectedValue(
+      new VnpayGatewayError(
+        'VNPAY_TIMEOUT',
+        'private details that must not be saved',
+      ),
+    );
+    queryMock.mockRejectedValue(
+      new VnpayGatewayError('VNPAY_UNVERIFIED_99', 'private provider data'),
+    );
+    const first = await refunds.request(f.customer.id, f.order.id, {});
+    const audit = await prisma.refund.findFirstOrThrow({
+      where: { orderId: f.order.id },
+    });
+    expect(audit.rawResponse).toEqual({
+      code: 'VNPAY_TIMEOUT',
+      stage: 'submit',
+    });
+    expect(first.status).toBe('REFUND_PENDING');
+    expect(JSON.stringify(first)).not.toContain('private details');
+    const second = await refunds.reconcile(f.customer.id, f.order.id);
+    const checked = await prisma.refund.findUniqueOrThrow({
+      where: { id: audit.id },
+    });
+    expect(checked.rawResponse).toEqual({
+      code: 'VNPAY_UNVERIFIED_99',
+      stage: 'query',
+    });
+    expect(second.status).toBe('REFUND_PENDING');
+    expect(second.inventoryStatus).toBe('DEDUCTED');
+    expect(checked.status).toBe('PENDING');
+    expect(submitMock).toHaveBeenCalledTimes(1);
+    expect(queryMock).toHaveBeenCalledTimes(1);
   });
   it('retains a rejected refund audit, and permits a new attempt only while the original window remains open', async () => {
     const f = await paid();

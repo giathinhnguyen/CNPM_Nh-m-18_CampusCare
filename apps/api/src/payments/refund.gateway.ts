@@ -1,5 +1,9 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
-import { VnpayGateway, vnpDate } from './vnpay.gateway.js';
+import {
+  VnpayGateway,
+  vnpDate,
+  unverifiedVnpayResult,
+} from './vnpay.gateway.js';
 import { zalopayMac } from './zalopay.gateway.js';
 
 export type RefundResult = {
@@ -130,10 +134,7 @@ export class RefundGateway {
       vnp_OrderInfo: 'Hoan tien don BrewLite',
     };
     data.vnp_SecureHash = this.vnpay.sign(Object.values(data).join('|'));
-    const response = await this.post(
-      'https://sandbox.vnpayment.vn/merchant_webapi/api/transaction',
-      data,
-    );
+    const response = await this.vnpay.transaction(data, 12000);
     const fields = [
       'vnp_ResponseId',
       'vnp_Command',
@@ -168,9 +169,7 @@ export class RefundGateway {
       response.vnp_TxnRef !== request.payment.id ||
       String(response.vnp_Amount) !== data.vnp_Amount
     )
-      throw new ServiceUnavailableException(
-        'Kết quả hoàn tiền VNPay chưa xác minh được.',
-      );
+      throw unverifiedVnpayResult(response);
     return this.vnpayResult(response, true);
   }
   async query(request: RefundRequest): Promise<RefundResult> {

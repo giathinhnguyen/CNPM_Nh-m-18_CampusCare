@@ -1,6 +1,27 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 
+export class VnpayGatewayError extends ServiceUnavailableException {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super({ message, code });
+  }
+}
+
+export function unverifiedVnpayResult(result: Record<string, unknown>) {
+  const value = result.vnp_ResponseCode;
+  const code =
+    typeof value === 'string' && /^\d{2}$/.test(value) ? value : null;
+  return new VnpayGatewayError(
+    code ? `VNPAY_UNVERIFIED_${code}` : 'VNPAY_INVALID_RESPONSE',
+    code === '99'
+      ? 'VNPay sandbox trả lỗi 99; chưa xác minh được kết quả. Vui lòng liên hệ quán để đối soát.'
+      : 'Kết quả VNPay chưa xác minh được; giao dịch tiếp tục chờ đối soát.',
+  );
+}
+
 export function vnpDate(date: Date) {
   return new Date(date.getTime() + 7 * 3600000)
     .toISOString()
@@ -42,6 +63,48 @@ export class VnpayGateway {
       Buffer.from(hash, 'hex'),
     );
   }
+  async transaction(data: Record<string, string>, timeout = 10000) {
+    let response: Response;
+    try {
+      response = await fetch(
+        'https://sandbox.vnpayment.vn/merchant_webapi/api/transaction',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data),
+          signal: AbortSignal.timeout(timeout),
+        },
+      );
+    } catch (error) {
+      const timedOut = error instanceof Error && error.name === 'TimeoutError';
+      throw new VnpayGatewayError(
+        timedOut ? 'VNPAY_TIMEOUT' : 'VNPAY_NETWORK_ERROR',
+        timedOut
+          ? 'Kết nối VNPay quá thời gian chờ; kết quả giao dịch chưa được xác định.'
+          : 'Chưa kết nối được VNPay; kết quả giao dịch chưa được xác định.',
+      );
+    }
+    if (!response.ok)
+      throw new VnpayGatewayError(
+        'VNPAY_HTTP_ERROR',
+        'API VNPay tạm thời chưa trả kết quả hợp lệ.',
+      );
+    let result: unknown;
+    try {
+      result = await response.json();
+    } catch {
+      throw new VnpayGatewayError(
+        'VNPAY_INVALID_RESPONSE',
+        'Phản hồi VNPay chưa xác minh được.',
+      );
+    }
+    if (!result || typeof result !== 'object' || Array.isArray(result))
+      throw new VnpayGatewayError(
+        'VNPAY_INVALID_RESPONSE',
+        'Phản hồi VNPay chưa xác minh được.',
+      );
+    return result as Record<string, unknown>;
+  }
   verify(input: Record<string, unknown>): Record<string, string> | null {
     if (typeof input.vnp_SecureHash !== 'string') return null;
     const params: Record<string, string> = {};
@@ -82,7 +145,8 @@ export class VnpayGateway {
       vnp_ReturnUrl:
         process.env.VNPAY_RETURN_URL || 'http://localhost:5173/payments/return',
     };
-    if (channel !== 'card') throw new ServiceUnavailableException('VNPay chỉ hỗ trợ thẻ nội địa.');
+    if (channel !== 'card')
+      throw new ServiceUnavailableException('VNPay chỉ hỗ trợ thẻ nội địa.');
     params.vnp_BankCode = 'VNBANK';
     const query = queryString(params);
     return `https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?${query}&vnp_SecureHash=${this.sign(query)}`;
@@ -96,24 +160,11 @@ export class VnpayGateway {
       vnp_TxnRef: id,
       vnp_TransactionDate: vnpDate(createdAt),
       vnp_CreateDate: vnpDate(new Date()),
-      vnp_IpAddr: '127.0.0.1',
+      vnp_IpAddr: process.env.VNPAY_API_IP || '127.0.0.1',
       vnp_OrderInfo: `Kiem tra BrewLite ${id}`,
     };
     data.vnp_SecureHash = this.sign(Object.values(data).join('|'));
-    const response = await fetch(
-      'https://sandbox.vnpayment.vn/merchant_webapi/api/transaction',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-        signal: AbortSignal.timeout(10000),
-      },
-    );
-    if (!response.ok)
-      throw new ServiceUnavailableException(
-        'Chưa kết nối được VNPay để đối soát',
-      );
-    const result = (await response.json()) as Record<string, string>;
+    const result = await this.transaction(data);
     const fields = [
       'vnp_ResponseId',
       'vnp_Command',
@@ -132,18 +183,22 @@ export class VnpayGateway {
       'vnp_PromotionAmount',
     ];
     if (
+      typeof result.vnp_SecureHash !== 'string' ||
+      !fields.every(
+        (key) => result[key] === undefined || typeof result[key] === 'string',
+      ) ||
       !this.matches(
-        fields.map((key) => result[key] ?? '').join('|'),
-        result.vnp_SecureHash ?? '',
+        fields
+          .map((key) => (typeof result[key] === 'string' ? result[key] : ''))
+          .join('|'),
+        result.vnp_SecureHash,
       ) ||
       result.vnp_TmnCode !== this.config().merchant ||
       result.vnp_TxnRef !== id ||
       result.vnp_Command !== 'querydr' ||
       result.vnp_ResponseCode !== '00'
     )
-      throw new ServiceUnavailableException(
-        'VNPay chưa trả kết quả đối soát hợp lệ; giao dịch tiếp tục chờ xác nhận',
-      );
-    return result;
+      throw unverifiedVnpayResult(result);
+    return result as Record<string, string>;
   }
 }
