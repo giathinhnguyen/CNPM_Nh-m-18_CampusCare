@@ -9,6 +9,7 @@ export interface AuthUser {
   fullName: string;
   role: "CUSTOMER" | "ADMIN";
   loyaltyPoints: number;
+  loyaltyDebt?: number;
   hasPassword: boolean;
 }
 

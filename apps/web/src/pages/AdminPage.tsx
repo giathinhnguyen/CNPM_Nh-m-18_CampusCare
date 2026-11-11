@@ -17,6 +17,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { Button } from "../components/ui";
+import RefundActions from "../components/RefundActions";
 import {
   adminService,
   type AdminData,
@@ -58,6 +59,8 @@ const statusNames: Record<string, string> = {
   PENDING_PAYMENT: "Chờ thanh toán",
   PAYMENT_FAILED: "Thanh toán thất bại",
   PAID: "Đã thanh toán",
+  REFUND_PENDING: "Đang hoàn tiền",
+  REFUNDED: "Đã hủy · Đã hoàn tiền",
   CANCELLED: "Đã hủy",
   EXPIRED: "Hết hạn",
 };
@@ -552,7 +555,10 @@ function Panel({ section }: { section: Section }) {
         />
       )}
       {customer && (
-        <CustomerOrders customer={customer} onClose={() => setCustomer(null)} />
+        <CustomerOrders customer={customer} onClose={() => {
+          setCustomer(null);
+          void adminService.overview().then(setData).catch(() => {});
+        }} />
       )}
     </>
   );
@@ -1132,6 +1138,9 @@ function CustomerOrders({
                 .join(", ")}
             </p>
             <p className="mt-3 font-semibold">{money(o.finalAmount)}</p>
+            <RefundActions admin order={o} onUpdated={updated => {
+              setOrders(current => current?.map(item => item.id === updated.id ? updated : item) ?? null);
+            }} />
           </div>
         ))}
       </div>

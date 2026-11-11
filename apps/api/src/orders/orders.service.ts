@@ -34,6 +34,10 @@ const details = {
     orderBy: { createdAt: 'desc' as const },
   },
   loyaltyTxs: { select: { type: true, pointsChange: true } },
+  refunds: {
+    select: { id: true, amount: true, reason: true, status: true, providerRefundId: true, createdAt: true, updatedAt: true },
+    orderBy: { createdAt: 'desc' as const },
+  },
 };
 
 @Injectable()
@@ -304,20 +308,23 @@ export class OrdersService {
     }
     const earned = order.finalAmount.div(1000).floor().toNumber();
     if (earned > 0) {
+      const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } });
+      const repaid = Math.min(user.loyaltyDebt, earned);
       await tx.user.update({
         where: { id: order.userId },
-        data: { loyaltyPoints: { increment: earned } },
+        data: { loyaltyPoints: { increment: earned - repaid }, loyaltyDebt: { decrement: repaid } },
       });
       await tx.loyaltyTransaction.create({
         data: {
           userId: order.userId,
           orderId: id,
           type: 'EARN',
-          pointsChange: earned,
+          pointsChange: earned - repaid,
+          debtChange: -repaid,
         },
       });
     }
-    await tx.order.update({ where: { id }, data: { status: 'PAID' } });
+    await tx.order.update({ where: { id }, data: { status: 'PAID', paidAt: new Date() } });
   }
 
   async cancel(userId: string, id: string, expired = false) {

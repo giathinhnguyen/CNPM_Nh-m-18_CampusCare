@@ -17,6 +17,7 @@ import {
 import { formatCurrency } from "../lib/utils";
 import { useAuth } from "../contexts/AuthContext";
 import ZalopayQrPanel from "../components/ZalopayQrPanel";
+import RefundActions from "../components/RefundActions";
 
 const labels = {
   PENDING_PAYMENT: "Chờ thanh toán",
@@ -24,6 +25,8 @@ const labels = {
   PAID: "Đã thanh toán",
   CANCELLED: "Đã hủy",
   EXPIRED: "Hết hạn",
+  REFUND_PENDING: "Đang hoàn tiền",
+  REFUNDED: "Đã hủy · Đã hoàn tiền",
 };
 function paymentWindowExpired(order: Order, now: number) {
   return order.status === "EXPIRED" ||
@@ -123,7 +126,8 @@ export default function OrdersPage() {
       setCancelTarget(null);
     }
   }
-  const watchKey = orders.filter(order => ["PENDING_PAYMENT", "PAYMENT_FAILED"].includes(order.status)).map(order => order.id).join(",");
+  const watchKey = orders.filter(order => ["PENDING_PAYMENT", "PAYMENT_FAILED", "REFUND_PENDING"].includes(order.status) ||
+    (order.status === "PAID" && order.paidAt && Date.parse(order.paidAt) + 135000 > Date.now())).map(order => order.id).join(",");
   const overdueKey = orders.filter(order => ["PENDING_PAYMENT", "PAYMENT_FAILED"].includes(order.status) && paymentWindowExpired(order, now)).map(order => order.id).join(",");
   useEffect(() => { latestOrders.current = orders; }, [orders]);
   useEffect(() => {
@@ -179,7 +183,10 @@ export default function OrdersPage() {
     <section
       className={`mx-auto px-4 py-8 sm:px-6 md:py-14 ${detail ? "max-w-3xl" : "max-w-5xl"}`}
     >
-      {confirmed ? (
+      {detail && ["REFUND_PENDING", "REFUNDED"].includes(orders[0]?.status) ? (
+        <PageTitle eyebrow="Đơn hàng của bạn" title={orders[0].status === "REFUNDED" ? "Đơn đã hủy và hoàn tiền" : "Đang xử lý hoàn tiền"}
+          description={orders[0].status === "REFUNDED" ? "Mời bạn quay lại menu chọn đồ uống yêu thích." : "Yêu cầu hủy đã được tiếp nhận. Kết quả sẽ cập nhật khi cổng xác nhận."} />
+      ) : confirmed ? (
         <div className="mb-8 rounded-[2rem] bg-[#e4eee1] px-6 py-10 text-center">
           <CheckCircle2 size={48} className="mx-auto text-[#527155]" />
           <h1 className="mt-5 font-serif text-4xl text-[#302018]">
@@ -458,6 +465,10 @@ export default function OrdersPage() {
                       )}
                     </>
                   )}
+                  <RefundActions order={order} onUpdated={updated => {
+                    setOrders(current => current.map(item => item.id === updated.id ? updated : item));
+                    void refreshUser().catch(() => {});
+                  }} />
                   {!detail && (
                     <div className="mt-4">
                       <ButtonLink to={`/orders/${order.id}`} variant="ghost">

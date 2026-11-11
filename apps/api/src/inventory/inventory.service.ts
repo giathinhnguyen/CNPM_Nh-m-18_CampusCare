@@ -171,6 +171,23 @@ export class InventoryService {
     });
   }
 
+  // A paid order was deducted already: refund restores onHand, never reserved.
+  async restoreRefund(tx: Prisma.TransactionClient, orderId: string) {
+    const order = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
+    if (order.inventoryStatus === 'RESTORED') return;
+    if (order.inventoryStatus !== 'DEDUCTED' || !Array.isArray(order.reservedIngredients))
+      throw new ConflictException('Thiếu dữ liệu nguyên liệu đã trừ để hoàn đơn.');
+    const usage = order.reservedIngredients as IngredientUsage[];
+    for (const item of [...usage].sort((a, b) => a.ingredientId.localeCompare(b.ingredientId))) {
+      const quantity = new Prisma.Decimal(item.quantity);
+      if (!quantity.isFinite() || quantity.lte(0)) throw new ConflictException('Định lượng hoàn kho không hợp lệ.');
+      await tx.ingredientStock.update({
+        where: { ingredientId: item.ingredientId }, data: { onHand: { increment: quantity } },
+      });
+    }
+    await tx.order.update({ where: { id: orderId }, data: { inventoryStatus: 'RESTORED' } });
+  }
+
   // Caller locks the customer and order first. Snapshot is the sole source after reservation.
   async settle(
     tx: Prisma.TransactionClient,

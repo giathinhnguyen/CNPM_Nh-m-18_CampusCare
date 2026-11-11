@@ -33,6 +33,8 @@ export interface Order {
   id: string;
   orderCode: string;
   status: OrderStatus;
+  paidAt: string | null;
+  refunds: { id: string; amount: string; reason: string; status: "PENDING" | "SUCCESS" | "FAILED"; providerRefundId: string | null; createdAt: string; updatedAt: string }[];
   createdAt: string;
   reservationExpiresAt: string;
   customerName: string;
@@ -92,6 +94,8 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
   return data as T;
 }
 export const orderService = {
+  refund: (id: string, reason: string) => request<Order>(`/payments/orders/${encodeURIComponent(id)}/refund`, { reason }),
+  reconcileRefund: (id: string) => request<Order>(`/payments/orders/${encodeURIComponent(id)}/refund/reconcile`, {}),
   create: (body: unknown) => request<Order>("/orders", body),
   list: () => request<Order[]>("/orders"),
   forPayment: (id: string) =>

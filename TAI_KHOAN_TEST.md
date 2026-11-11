@@ -1,6 +1,6 @@
 # Tài khoản kiểm thử BrewLite và thẻ VNPay sandbox
 
-Cập nhật ngày **10/11/2026**.
+Cập nhật ngày **11/11/2026**.
 
 ## Tài khoản trên website AWS
 
@@ -52,5 +52,16 @@ Nguồn: [Danh sách thẻ kiểm thử chính thức VNPay](https://sandbox.vnp
 3. Tạo đơn riêng để thử **Hủy thanh toán** trên VNPay; chờ quay về hóa đơn và kiểm tra thông báo thất bại. Hủy trên cổng là một kết quả thanh toán, khác với thao tác hủy đơn hàng.
 4. Với thẻ không đủ số dư, khóa hoặc hết hạn, kiểm tra thông báo từ VNPay rồi hoàn tất luồng quay về BrewLite. Đây là các kịch bản sandbox của VNPay, không phải xác nhận mọi nhánh đã được nghiệm thu end-to-end trong ứng dụng.
 5. Nếu đơn vẫn chờ đối soát, dùng **Kiểm tra trạng thái** trên hóa đơn. Trạng thái phụ thuộc kết quả xác minh của backend; lỗi QueryDR ở sandbox có thể làm đơn tiếp tục chờ đối soát.
+
+## Hủy đơn đã thanh toán và hoàn tiền
+
+- Khách được hủy đơn của mình; admin được hủy đơn khách trong **2 phút từ `paidAt`**, thời điểm backend xác nhận thanh toán thành công. Đúng hoặc quá 2 phút, backend không nhận yêu cầu hủy mới. Đơn cũ đã quá hạn không được mở lại thời gian hủy.
+- Khách: mở chi tiết/hóa đơn → **Hủy đơn và hoàn tiền** → xác nhận. Admin: **Khách hàng → Xem đơn** rồi dùng cùng thao tác.
+- Hoàn toàn bộ số tiền đã trả sau khuyến mãi qua đúng cổng sandbox của giao dịch gốc. Hệ thống lưu payment gốc và giao dịch refund riêng; bấm lặp không tạo thêm yêu cầu đang xử lý.
+- Nếu cổng đang xử lý hoặc chưa xác minh được kết quả, đơn hiển thị **Đang hoàn tiền**. Chỉ khi cổng xác nhận thành công mới hiển thị **Đã hủy · Đã hoàn tiền**, hoàn kho theo định lượng đã trừ, hoàn điểm đổi thưởng và thu hồi điểm tích lũy của đơn.
+- Yêu cầu đã được tiếp nhận trong 2 phút vẫn tiếp tục đối soát sau hạn; nút **Kiểm tra hoàn tiền** không tạo yêu cầu hoàn mới. Cổng từ chối/timeout không được giả lập thành công.
+- Nếu điểm tích lũy của đơn đã được dùng/giữ cho đơn khác, hệ thống vẫn hoàn tiền; phần điểm chưa thu hồi được ghi nhận để bù từ điểm tích lũy mua hàng tiếp theo. Đơn 0đ hoàn nguyên liệu/điểm, không gọi cổng thu/hoàn tiền.
+- Sau hoàn tiền, khách được gợi ý chọn đồ uống khác nhưng **vẫn được đặt lại món cũ** nếu còn nguyên liệu. Không vô hiệu hóa món và không tự thêm món bị hủy vào giỏ.
+- Để kiểm thử trọn luồng hoàn tiền, cần một giao dịch sandbox thành công rồi hủy trong hạn. Test tự động dùng phản hồi cổng giả lập để kiểm trạng thái/kho/điểm; việc API chưa trả kết quả cuối không phải bằng chứng tiền đã được hoàn.
 
 File này chỉ chứa tài khoản demo và dữ liệu thẻ sandbox. Cấu hình SMTP, JWT, khóa ký cổng thanh toán, SSH key và tài khoản quản trị triển khai riêng được giữ ngoài GitHub.

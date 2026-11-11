@@ -44,4 +44,4 @@ export interface Promotion {
   products: { product: { id: string; name: string } }[];
 }
 
-export type OrderStatus = "PENDING_PAYMENT" | "PAYMENT_FAILED" | "PAID" | "CANCELLED" | "EXPIRED";
+export type OrderStatus = "PENDING_PAYMENT" | "PAYMENT_FAILED" | "PAID" | "CANCELLED" | "EXPIRED" | "REFUND_PENDING" | "REFUNDED";

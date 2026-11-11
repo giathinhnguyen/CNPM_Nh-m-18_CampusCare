@@ -7,6 +7,7 @@ enum InventoryStatus {
   RESERVED
   DEDUCTED
   RELEASED
+  RESTORED
 
   @@map("inventory_status_enum")
 }
@@ -106,6 +107,8 @@ enum OrderStatus {
   PAID
   CANCELLED
   EXPIRED
+  REFUND_PENDING
+  REFUNDED
 
   @@map("order_status_enum")
 }
@@ -116,6 +119,14 @@ enum PaymentStatus {
   FAILED
 
   @@map("payment_status_enum")
+}
+
+enum RefundStatus {
+  PENDING
+  SUCCESS
+  FAILED
+
+  @@map("refund_status_enum")
 }
 
 enum PaymentMethod {
@@ -139,6 +150,8 @@ enum LoyaltyTransactionType {
   REDEEM
   EXPIRED_ROLLBACK
   REDEMPTION_ROLLBACK
+  REFUND_EARN
+  REFUND_REDEEM
 
   @@map("loyalty_type_enum")
 }
@@ -185,6 +198,7 @@ model User {
   googleId       String?  @unique @map("google_id") @db.VarChar(255)
   role           UserRole @default(CUSTOMER)
   loyaltyPoints  Int      @default(0) @map("loyalty_points")
+  loyaltyDebt    Int      @default(0) @map("loyalty_debt")
   reservedPoints Int      @default(0) @map("reserved_points")
   createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -195,6 +209,7 @@ model User {
   loyaltyTransactions    LoyaltyTransaction[]
   rewardRedemptions      RewardRedemption[]
   passwordSetupChallenge PasswordSetupChallenge?
+  requestedRefunds       Refund[]
 
   @@map("users")
 }
@@ -382,6 +397,7 @@ model Order {
   discountAmount       Decimal         @default(0) @map("discount_amount") @db.Decimal(12, 0)
   finalAmount          Decimal         @map("final_amount") @db.Decimal(12, 0)
   status               OrderStatus     @default(PENDING_PAYMENT)
+  paidAt               DateTime?       @map("paid_at") @db.Timestamptz(6)
   reservationExpiresAt DateTime        @map("reservation_expires_at") @db.Timestamptz(6)
   note                 String?         @db.VarChar(255)
   createdAt            DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -391,6 +407,7 @@ model Order {
   promotion         Promotion?           @relation(fields: [promotionId], references: [id], onDelete: SetNull)
   items             OrderItem[]
   payments          Payment[]
+  refunds           Refund[]
   loyaltyTxs        LoyaltyTransaction[]
   rewardRedemptions RewardRedemption[]
 
@@ -461,11 +478,36 @@ model Payment {
   updatedAt      DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  refunds Refund[]
 
   @@unique([paymentMethod, transactionId])
   @@index([orderId])
   @@index([orderId, status])
   @@map("payments")
+}
+
+model Refund {
+  id                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId           String       @map("order_id") @db.Uuid
+  paymentId         String?      @map("payment_id") @db.Uuid
+  requestedById     String       @map("requested_by_id") @db.Uuid
+  providerReference String       @unique @map("provider_reference") @db.VarChar(45)
+  amount            Decimal      @db.Decimal(12, 0)
+  reason            String       @db.VarChar(100)
+  status            RefundStatus @default(PENDING)
+  providerRefundId  String?      @map("provider_refund_id") @db.VarChar(64)
+  submittedAt       DateTime?    @map("submitted_at") @db.Timestamptz(6)
+  lastCheckedAt     DateTime?    @map("last_checked_at") @db.Timestamptz(6)
+  rawResponse       Json?        @map("raw_response") @db.JsonB
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+  order             Order        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  payment           Payment?     @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  requestedBy       User         @relation(fields: [requestedById], references: [id], onDelete: Restrict)
+
+  @@index([status, lastCheckedAt])
+  @@index([orderId, createdAt])
+  @@map("refunds")
 }
 
 model RewardProduct {
@@ -519,6 +561,7 @@ model LoyaltyTransaction {
   orderId            String?                @map("order_id") @db.Uuid
   rewardRedemptionId String?                @map("reward_redemption_id") @db.Uuid
   pointsChange       Int                    @map("points_change")
+  debtChange         Int                    @default(0) @map("debt_change")
   type               LoyaltyTransactionType
   description        String?                @db.VarChar(255)
   createdAt          DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)

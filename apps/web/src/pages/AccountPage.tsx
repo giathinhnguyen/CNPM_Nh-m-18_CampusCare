@@ -18,7 +18,8 @@ export default function AccountPage() {
             <div className="flex items-center gap-3 text-sm text-[#3f332d]"><UserRound size={18} strokeWidth={1.5} className="shrink-0 text-[#927b68]" /><span>Họ tên: {user.fullName}</span></div>
             <div className="flex items-center gap-3 text-sm text-[#3f332d]"><Mail size={18} strokeWidth={1.5} className="shrink-0 text-[#927b68]" /><span className="break-all">Email: {user.email}</span></div>
             <div className="flex items-center gap-3 text-sm text-[#3f332d]"><Trophy size={18} strokeWidth={1.5} className="shrink-0 text-[#a28b72]" /><span>Điểm thưởng: {user.loyaltyPoints}</span></div>
-            {user.hasPassword ? (
+              {(user.loyaltyDebt ?? 0) > 0 && <p className="text-sm text-amber-800">Có {user.loyaltyDebt} điểm cần bù do hoàn tiền đơn đã dùng điểm tích lũy. Điểm từ các lần mua tiếp theo sẽ được dùng để bù trước khi cộng vào số dư.</p>}
+              {user.hasPassword ? (
               <div className="flex items-center gap-3 text-sm text-[#3f332d]"><LockKeyhole size={18} strokeWidth={1.5} className="shrink-0 text-[#63908c]" /><span>Tài khoản đã có mật khẩu BrewLite.</span></div>
             ) : !success && (
               <div className="border-t border-[#eee7df] pt-5"><PasswordSetupForm key={user.id} onSuccess={(message) => { setSuccess(message); void refreshUser().catch(() => { /* A reload will refresh the profile after a network failure. */ }); }} /></div>
