@@ -1,0 +1,7 @@
+# Use this workspace to collaborate
+workspace:
+  id: b8b31f16-f557-4d71-87df-83bba2bac46e
+
+localResources:
+  collections:
+    - ../docs/api/BrewLite Payment - manual scenarios

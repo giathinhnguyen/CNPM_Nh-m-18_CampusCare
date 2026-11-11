@@ -335,7 +335,10 @@ export class RewardsCartService {
     const item = await tx.cartItem.findFirst({ where: { id: itemId, userId } });
     if (item?.rewardRedemptionId)
       await releaseRedemption(tx, item.rewardRedemptionId);
-    return this.originalCart(tx).removeItem(userId, itemId);
+    // The caller already owns this transaction. Calling the legacy service
+    // here would start a nested transaction on Prisma.TransactionClient,
+    // which does not expose $transaction.
+    return tx.cartItem.deleteMany({ where: { id: itemId, userId } });
   }
 
   async removeItem(userId: string, itemId: string) {

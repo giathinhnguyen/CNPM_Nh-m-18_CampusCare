@@ -6,7 +6,7 @@ import { setupSwagger } from './swagger/setup.js';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Tiền tố chung cho các API
+  // Tiến tố chung cho các API
   app.setGlobalPrefix('api');
   if (process.env.NODE_ENV !== 'production' || process.env.SWAGGER_ENABLED === 'true') setupSwagger(app);
 
@@ -22,4 +22,7 @@ async function bootstrap() {
   await app.listen(port, '0.0.0.0');
 }
 
-void bootstrap();
+bootstrap().catch((error: unknown) => {
+  console.error('Failed to start API', error);
+  process.exitCode = 1;
+});
