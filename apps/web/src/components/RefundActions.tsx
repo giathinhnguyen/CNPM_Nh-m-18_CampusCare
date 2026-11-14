@@ -220,8 +220,8 @@ export default function RefundActions({
           )}
         </>
       )}
-      {latest?.reason && (
-        <p className="text-xs text-[#8d7a70]">Lý do: {latest.reason}</p>
+      {latest?.reason && (pending || refunded || remaining > 0) && (
+        <p className="text-xs text-[#8d7a70]">Lý do yêu cầu hủy: {latest.reason}</p>
       )}
     </div>
   );
